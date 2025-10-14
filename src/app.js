@@ -9,6 +9,9 @@ const overlay = document.getElementById("overlay");
 const hint = document.getElementById("hint");
 const pop = document.getElementById("pop");
 const sub = document.getElementById("sub");
+const rubyLine  = document.getElementById("rubyLine");
+const origLine  = document.getElementById("origLine");
+const transLine = document.getElementById("transLine");
 
 // 탭
 const tabs = pop.querySelectorAll(".pop-tabs button");
@@ -105,59 +108,58 @@ function wireClicks(){
 // ---------- 메인 팝업 ----------
 function openMainPopoverFor(anchorEl, text){
   pop.hidden = false;
-
-  // 초기화
-  origSpan.textContent = text;
-  rubyDiv.textContent = '';
-  transDiv.textContent = '';
-  morphWrap.innerHTML = '';
-
-  // 배치
   placeMainPopover(anchorEl, pop, 8);
 
-  // 탭 초기화
-  tabs.forEach(b=>b.classList.remove('active'));
-  tabs[0].classList.add('active');
-  panels.forEach(p=>p.hidden = (p.dataset.tabpanel!=='orig'));
+  // 초기화
+  rubyLine.innerHTML = '';
+  origLine.innerHTML = '';
+  transLine.textContent = '';
+  currentSentence = text;
 
-  // 형태소(임시: 공백 분리) → 클릭 시 서브팝업
-  text.split(/\s+/).forEach(tok=>{
-    if(!tok) return;
+  // 1) 원문 렌더(클릭 가능한 토큰)
+  // 우선 공백 기준으로 토큰화. 이후 furigana 응답이 오면 대체 가능.
+  text.split(/(\s+)/).forEach(tok=>{
+    if (!tok) return;
+    if (/^\s+$/.test(tok)){ origLine.appendChild(document.createTextNode(tok)); return; }
     const span = document.createElement('span');
-    span.className = 'morph';
+    span.className = 'tok';
     span.textContent = tok;
     span.addEventListener('click', ()=> openSubForToken(span, tok));
-    morphWrap.appendChild(span);
+    origLine.appendChild(span);
   });
 
-  // 후리가나/번역 지연 호출
-  pop.querySelector('button[data-tab="ruby"]').onclick = async ()=>{
-    if (!rubyDiv.textContent) {
-      const r = await getFurigana(currentSentence);
-      rubyDiv.innerHTML = (r.tokens || r.result || [])
-        .map(t => t.reading ? `<ruby>${escapeHtml(t.surface)}<rt>${escapeHtml(t.reading)}</rt></ruby>` : escapeHtml(t.surface||''))
-        .join('');
-    }
-  };
-  pop.querySelector('button[data-tab="trans"]').onclick = async ()=>{
-    if (!transDiv.textContent) {
-      const r = await translateJaKo(currentSentence);
-      transDiv.textContent = r.text || r.result || '';
-    }
-  };
+  // 2) 비동기: 후리가나 + 번역 병렬 로드
+  (async ()=>{
+    try{
+      const [rubi, tr] = await Promise.all([
+        getFurigana(currentSentence),
+        translateJaKo(currentSentence)
+      ]);
 
-  // 편집
+      // 후리가나: 위 라인에 작게
+      rubyLine.innerHTML = (rubi.tokens || rubi.result || [])
+        .map(t => t.reading
+          ? `<ruby>${escapeHtml(t.surface)}<rt>${escapeHtml(t.reading)}</rt></ruby>`
+          : escapeHtml(t.surface||'')
+        ).join('');
+
+      // 번역
+      transLine.textContent = tr.text || tr.result || '';
+    }catch(e){
+      // 조용히 실패 허용
+    }
+  })();
+
+  // 3) 편집(UI 동일)
   editBtn.onclick = ()=>{
     editInput.value = currentSentence;
-    editArea.hidden = false;
-    editInput.focus();
+    editArea.hidden = false; editInput.focus();
   };
   cancelEdit.onclick = ()=> editArea.hidden = true;
   saveEdit.onclick = ()=>{
     currentSentence = editInput.value.trim();
-    origSpan.textContent = currentSentence;
-    rubyDiv.textContent = '';
-    transDiv.textContent = '';
+    // 원문/루비/번역 초기화 후 재요청
+    openMainPopoverFor(anchorEl, currentSentence);
     editArea.hidden = true;
   };
 }
