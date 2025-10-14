@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>JA OCR Overlay</title>
   <link rel="stylesheet" href="./style.css" />
-  <!-- Tesseract.js (브라우저 워커) -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <meta name="theme-color" content="#111" />
 </head>
 <body>
   <header class="topbar">JA OCR Overlay</header>
@@ -28,6 +27,7 @@
         <button data-tab="ruby">ふりがな</button>
         <button data-tab="trans">번역</button>
       </div>
+
       <div class="section section-original" data-tabpanel="orig">
         <div class="orig-line">
           <span id="origText"></span>
@@ -40,9 +40,11 @@
         </div>
         <div id="morphWrap" class="morph-wrap"></div>
       </div>
+
       <div class="section section-ruby" data-tabpanel="ruby" hidden>
         <div id="rubyText"></div>
       </div>
+
       <div class="section section-translation" data-tabpanel="trans" hidden>
         <div id="transText"></div>
       </div>
@@ -53,10 +55,10 @@
   <div id="sub" class="subpop" hidden></div>
   <svg id="sub-tail" class="tail-svg"></svg>
 
-  <script src="./src/place.js"></script>
-  <script src="./src/api.js"></script>
-  <script src="./src/ocr.js"></script>
-  <script src="./src/app.js"></script>
+  <!-- OCR 라이브러리: 전역 Tesseract -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <!-- 앱 엔트리: ES Module (내부에서 ./src/api.js / ocr.js / place.js import) -->
+  <script type="module" src="./src/app.js"></script>
 </body>
 </html>
-
