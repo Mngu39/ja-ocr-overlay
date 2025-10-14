@@ -68,7 +68,8 @@ async function safeFurigana(text){
         const annos = await ocrJapanese(url); // 원본 기준
         annosGlobal = annos;
         hint.textContent = "문장을 탭하세요";
-        renderOverlay(); // 표시 크기에 맞게 박스
+        renderOverlay();                 // 1차
+        requestAnimationFrame(renderOverlay); // 레이아웃 확정 후 2차
       } catch (e) {
         hint.textContent = "OCR 오류: " + e.message;
       }
@@ -93,21 +94,18 @@ function attachBoxListeners(){
 }
 
 function renderOverlay(){
-  const stage = document.getElementById('stage');
+  // 화면에 실제로 보이는 이미지 크기
+  const rect = imgEl.getBoundingClientRect();
+  const dw = Math.max(1, Math.round(rect.width));
+  const dh = Math.max(1, Math.round(rect.height));
 
-  // 화면 보이는 크기
-  const dw = imgEl.clientWidth;
-  const dh = imgEl.clientHeight;
-
-  // 스케일
-  const sx = dw / imgEl.naturalWidth;
-  const sy = dh / imgEl.naturalHeight;
-
-  stage.style.width   = dw + 'px';
-  overlay.style.width = dw + 'px';
-  overlay.style.height= dh + 'px';
+  // ❗ stage.style.width 는 건드리지 않습니다
+  overlay.style.width  = dw + 'px';
+  overlay.style.height = dh + 'px';
 
   if (annosGlobal.length) {
+    const sx = dw / imgEl.naturalWidth;
+    const sy = dh / imgEl.naturalHeight;
     drawBoxes(annosGlobal, overlay, sx, sy);
     attachBoxListeners();
   }
