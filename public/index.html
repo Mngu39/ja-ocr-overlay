@@ -12,25 +12,21 @@
     <div id="overlay"></div>
     <div id="hint">이미지 불러오는 중…</div>
 
-    <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
       <div class="pop-head">
         <strong>원문</strong>
         <div class="pop-actions">
           <button id="btnEdit" class="btn sm">수정</button>
-          <button id="btnClose" class="btn sm ghost">닫기</button>
+          <!-- 닫기 버튼 제거 -->
         </div>
       </div>
       <div id="rubyLine" class="ruby-line"></div>
       <div id="origLine" class="orig-line"></div>
       <hr class="sep" />
-      <div class="pop-head">
-        <strong>번역</strong>
-      </div>
+      <div class="pop-head"><strong>번역</strong></div>
       <div id="transLine" class="trans-line">…</div>
     </div>
 
-    <!-- 수정 팝업 -->
     <dialog id="editDlg">
       <form method="dialog" class="edit-form">
         <label>원문 수정</label>
@@ -42,7 +38,6 @@
       </form>
     </dialog>
 
-    <!-- 서브 팝업 (형태소) -->
     <div id="sub" class="subpop" hidden></div>
   </main>
 
