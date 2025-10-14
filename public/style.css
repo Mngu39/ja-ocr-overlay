@@ -55,4 +55,17 @@ a.ext:hover{text-decoration:underline}
 .orig-line .tok:hover { border-bottom-color: currentColor; }
 .trans-line { font-size: 14px; opacity: .95; line-height: 1.5; margin-top: 2px; }
 .edit-line { display:flex; align-items:center; gap:6px; }
+/* ===== Overlay popup (Translator layout) ===== */
+.pop .overlay-card{ padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+.ruby-line{ font-size:12px; opacity:.85; line-height:1.25; word-break:break-word; }
+.orig-line{ font-size:16px; line-height:1.6; word-break:break-word;
+  -webkit-user-select:none; user-select:none; } /* iOS 선택 메뉴 방지 */
+.orig-line .tok{ cursor:pointer; border-bottom:1px dotted transparent; }
+.orig-line .tok:hover{ border-bottom-color:currentColor; }
+.trans-line{ font-size:14px; opacity:.95; line-height:1.5; }
+.edit-line{ display:flex; align-items:center; gap:6px; }
+
+/* 상자 클릭 시 하이라이트(선택된 문장) */
+.box.active{ outline:2px solid rgba(0,150,255,.6); }
+
 
