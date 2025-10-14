@@ -2,77 +2,50 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JA OCR Overlay</title>
   <link rel="stylesheet" href="./style.css" />
-  <meta name="theme-color" content="#111" />
 </head>
 <body>
-  <header class="topbar">JA OCR Overlay</header>
+  <main id="stage">
+    <img id="img" alt="screenshot" />
+    <div id="overlay"></div>
+    <div id="hint">이미지 불러오는 중…</div>
 
-  <main id="app">
-    <div id="stage">
-      <img id="img" alt="screenshot" />
-      <div id="overlay"></div>
+    <!-- 메인 팝업 -->
+    <div id="pop" class="popover" hidden>
+      <div class="pop-head">
+        <strong>원문</strong>
+        <div class="pop-actions">
+          <button id="btnEdit" class="btn sm">수정</button>
+          <button id="btnClose" class="btn sm ghost">닫기</button>
+        </div>
+      </div>
+      <div id="rubyLine" class="ruby-line"></div>
+      <div id="origLine" class="orig-line"></div>
+      <hr class="sep" />
+      <div class="pop-head">
+        <strong>번역</strong>
+      </div>
+      <div id="transLine" class="trans-line">…</div>
     </div>
-    <div id="hint" class="hint">이미지를 불러오는 중...</div>
+
+    <!-- 수정 팝업 -->
+    <dialog id="editDlg">
+      <form method="dialog" class="edit-form">
+        <label>원문 수정</label>
+        <textarea id="editInput" rows="4"></textarea>
+        <menu>
+          <button value="cancel" class="btn ghost">취소</button>
+          <button id="editOk" value="ok" class="btn">저장</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <!-- 서브 팝업 (형태소) -->
+    <div id="sub" class="subpop" hidden></div>
   </main>
 
-<!-- 메인 팝업: 상단(작은 루비) / 원문(토큰 클릭) / 번역(아래) -->
-<div id="pop" class="pop" hidden>
-  <div class="pop-arrow"></div>
-  <div class="pop-body overlay-card">
-    <div id="rubyLine"  class="ruby-line"></div>
-    <div id="origLine"  class="orig-line"></div>
-    <div id="transLine" class="trans-line"></div>
-
-    <div class="edit-line">
-      <button id="editBtn" class="tiny">✎</button>
-      <div id="editArea" class="edit" hidden>
-        <textarea id="editInput"></textarea>
-        <button id="saveEdit" class="tiny primary">저장</button>
-        <button id="cancelEdit" class="tiny">취소</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- 서브팝업(메인 외측 고정) -->
-<div id="sub" class="subpop" hidden></div>
-<svg id="sub-tail" class="tail-svg"></svg>
-
-
-      <div class="section section-original" data-tabpanel="orig">
-        <div class="orig-line">
-          <span id="origText"></span>
-          <button id="editBtn" class="tiny">✎</button>
-        </div>
-        <div id="editArea" class="edit" hidden>
-          <textarea id="editInput"></textarea>
-          <button id="saveEdit" class="tiny primary">저장</button>
-          <button id="cancelEdit" class="tiny">취소</button>
-        </div>
-        <div id="morphWrap" class="morph-wrap"></div>
-      </div>
-
-      <div class="section section-ruby" data-tabpanel="ruby" hidden>
-        <div id="rubyText"></div>
-      </div>
-
-      <div class="section section-translation" data-tabpanel="trans" hidden>
-        <div id="transText"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 서브팝업(항상 메인팝업 외측; 기본 bottom, 부족하면 top, 극단적이면 dock) -->
-  <div id="sub" class="subpop" hidden></div>
-  <svg id="sub-tail" class="tail-svg"></svg>
-
-  <!-- OCR 라이브러리: 전역 Tesseract -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-
-  <!-- 앱 엔트리: ES Module (내부에서 ./src/api.js / ocr.js / place.js import) -->
-  <script type="module" src="./src/app.js"></script>
+  <script type="module" src="../src/app.js"></script>
 </body>
 </html>
