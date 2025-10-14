@@ -108,7 +108,7 @@ function wireClicks(){
 // ---------- 메인 팝업 ----------
 function openMainPopoverFor(anchorEl, text){
   pop.hidden = false;
-  placeMainPopover(anchorEl, pop, 8);
+  placeMainPopover(anchorEl, pop, 8);   // 상/하 중 넓은 쪽에 배치
 
   // 초기화
   rubyLine.innerHTML = '';
@@ -116,19 +116,18 @@ function openMainPopoverFor(anchorEl, text){
   transLine.textContent = '';
   currentSentence = text;
 
-  // 1) 원문 렌더(클릭 가능한 토큰)
-  // 우선 공백 기준으로 토큰화. 이후 furigana 응답이 오면 대체 가능.
+  // 1) 원문(클릭 가능한 토큰) 렌더 — 공백 유지
   text.split(/(\s+)/).forEach(tok=>{
-    if (!tok) return;
+    if (tok === '') return;
     if (/^\s+$/.test(tok)){ origLine.appendChild(document.createTextNode(tok)); return; }
     const span = document.createElement('span');
     span.className = 'tok';
     span.textContent = tok;
-    span.addEventListener('click', ()=> openSubForToken(span, tok));
+    span.addEventListener('click', ()=> openSubForToken(span, tok)); // 서브팝업
     origLine.appendChild(span);
   });
 
-  // 2) 비동기: 후리가나 + 번역 병렬 로드
+  // 2) 루비/번역 비동기 로드 (둘 다 한 화면에 렌더)
   (async ()=>{
     try{
       const [rubi, tr] = await Promise.all([
@@ -136,7 +135,7 @@ function openMainPopoverFor(anchorEl, text){
         translateJaKo(currentSentence)
       ]);
 
-      // 후리가나: 위 라인에 작게
+      // 작은 루비
       rubyLine.innerHTML = (rubi.tokens || rubi.result || [])
         .map(t => t.reading
           ? `<ruby>${escapeHtml(t.surface)}<rt>${escapeHtml(t.reading)}</rt></ruby>`
@@ -150,7 +149,7 @@ function openMainPopoverFor(anchorEl, text){
     }
   })();
 
-  // 3) 편집(UI 동일)
+  // 3) 수정 기능(작게)
   editBtn.onclick = ()=>{
     editInput.value = currentSentence;
     editArea.hidden = false; editInput.focus();
@@ -158,8 +157,7 @@ function openMainPopoverFor(anchorEl, text){
   cancelEdit.onclick = ()=> editArea.hidden = true;
   saveEdit.onclick = ()=>{
     currentSentence = editInput.value.trim();
-    // 원문/루비/번역 초기화 후 재요청
-    openMainPopoverFor(anchorEl, currentSentence);
+    openMainPopoverFor(anchorEl, currentSentence); // 다시 렌더
     editArea.hidden = true;
   };
 }
