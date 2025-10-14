@@ -21,7 +21,7 @@ export async function gcvOCR(id){
 
 /* ▼▼▼ 아래 두 함수는 기존 번역기(Cloud Run)와 동일한 엔드포인트를 사용하세요 ▼▼▼
    URL만 당신 환경에 맞게 채우면 됩니다. */
-const RUN_BASE = "https://<YOUR-CLOUD-RUN-HOST>.a.run.app"; // ← 기존 번역기 URL로 교체
+const RUN_BASE = "https://furigana-api-345684237835.asia-northeast3.run.app"; // ← 기존 번역기 URL로 교체
 
 export async function getFurigana(text){
   // Sudachi 형태소 + reading 반환 형식에 맞게 조정
