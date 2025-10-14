@@ -48,4 +48,11 @@ body{margin:0;font-family:var(--font);background:#0a0a0a;color:#111}
 .subpop[data-mode="dock"]{left:8px; right:8px; bottom:calc(8px + var(--safe-bottom)); border-radius:12px 12px 0 0}
 a.ext{color:#2962ff; text-decoration:none}
 a.ext:hover{text-decoration:underline}
+.pop .pop-body.slim { padding: 10px 12px; gap: 8px; }
+.ruby-line { font-size: 12px; opacity: .85; line-height: 1.3; word-break: break-word; }
+.orig-line { font-size: 16px; line-height: 1.6; word-break: break-word; }
+.orig-line .tok { cursor: pointer; border-bottom: 1px dotted transparent; }
+.orig-line .tok:hover { border-bottom-color: currentColor; }
+.trans-line { font-size: 14px; opacity: .95; line-height: 1.5; margin-top: 2px; }
+.edit-line { display:flex; align-items:center; gap:6px; }
 
