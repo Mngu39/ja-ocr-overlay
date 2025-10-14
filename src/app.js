@@ -1,17 +1,16 @@
+// /src/app.js  — 최종본
 import { getImageById, getFurigana, translateJaKo, openNaverJaLemma, openNaverHanja } from "./api.js";
-import { ocrJapanese, drawBoxes } from "./ocr.js";
+import { ocrJapanese, drawBoxes } from "./ocr.js";   // ← drawBoxes는 (annos, overlay, sx, sy)
 import { placeMainPopover, placeSubDetached } from "./place.js";
 
-const qs = new URLSearchParams(location.search);
-const imgId = qs.get("id");
-
+// DOM refs
 const imgEl = document.getElementById("img");
 const overlay = document.getElementById("overlay");
 const hint = document.getElementById("hint");
 const pop = document.getElementById("pop");
 const sub = document.getElementById("sub");
 
-// 탭 스위치
+// 탭
 const tabs = pop.querySelectorAll(".pop-tabs button");
 const panels = pop.querySelectorAll("[data-tabpanel]");
 tabs.forEach(btn=>{
@@ -21,56 +20,99 @@ tabs.forEach(btn=>{
   });
 });
 
-const origSpan = document.getElementById("origText");
-const rubyDiv  = document.getElementById("rubyText");
-const transDiv = document.getElementById("transText");
-const morphWrap= document.getElementById("morphWrap");
-const editBtn  = document.getElementById("editBtn");
-const editArea = document.getElementById("editArea");
-const editInput= document.getElementById("editInput");
-const saveEdit = document.getElementById("saveEdit");
+// 팝업 내부 refs
+const origSpan   = document.getElementById("origText");
+const rubyDiv    = document.getElementById("rubyText");
+const transDiv   = document.getElementById("transText");
+const morphWrap  = document.getElementById("morphWrap");
+const editBtn    = document.getElementById("editBtn");
+const editArea   = document.getElementById("editArea");
+const editInput  = document.getElementById("editInput");
+const saveEdit   = document.getElementById("saveEdit");
 const cancelEdit = document.getElementById("cancelEdit");
 
+// 상태
+let annosGlobal = [];        // OCR 결과(원본 해상도 좌표)
 let currentSentence = "";
 let currentTokenEl = null;
 
-// 이미지 로드
+// ---------- 부트스트랩 ----------
 (async function bootstrap(){
   try{
+    const qs = new URLSearchParams(location.search);
+    const imgId = qs.get("id");
     if(!imgId) throw new Error("URL에 id 파라미터가 없습니다 (?id=...)");
-    const url = await getImageById(imgId);
-    imgEl.onload = async () => {
-      // 스케일 1:1로 오버레이 정렬
-      document.getElementById('stage').style.width = imgEl.naturalWidth + "px";
-      document.getElementById('stage').style.margin = "0 auto";
-      overlay.style.width = imgEl.naturalWidth + "px";
-      overlay.style.height= imgEl.naturalHeight + "px";
-      hint.textContent = "OCR 중...";
-      const annos = await ocrJapanese(url);
-      hint.textContent = "문장을 탭하세요";
-      drawBoxes(annos, overlay);
 
-      // 클릭 핸들
-      overlay.querySelectorAll('.box').forEach(box=>{
-        box.addEventListener('click', (e)=>{
-          currentSentence = box.dataset.text || "";
-          openMainPopoverFor(box, currentSentence);
-        });
-      });
+    const url = await getImageById(imgId);
+
+    imgEl.onload = async () => {
+      try {
+        hint.textContent = "OCR 중...";
+        // 1) OCR (원본 해상도 기준)
+        const annos = await ocrJapanese(url);
+        annosGlobal = annos;
+
+        // 2) 표시 크기에 맞춰 렌더
+        hint.textContent = "문장을 탭하세요";
+        renderOverlay();
+        wireClicks();
+      } catch (e) {
+        hint.textContent = "OCR 오류: " + e.message;
+      }
     };
-    imgEl.src = url;
+
+    imgEl.src = url;  // 이미지 로드 트리거
   }catch(err){
     hint.textContent = "에러: " + err.message;
   }
 })();
 
+// ---------- 렌더 & 이벤트 ----------
+function renderOverlay(){
+  const stage = document.getElementById('stage');
+
+  // 화면에 “보이는 크기”
+  const dw = imgEl.clientWidth;
+  const dh = imgEl.clientHeight;
+
+  // 원본 대비 스케일
+  const sx = dw / imgEl.naturalWidth;
+  const sy = dh / imgEl.naturalHeight;
+
+  // 컨테이너 사이즈 동기화
+  stage.style.width   = dw + 'px';
+  overlay.style.width = dw + 'px';
+  overlay.style.height= dh + 'px';
+
+  // 박스 리렌더
+  if (annosGlobal.length) {
+    drawBoxes(annosGlobal, overlay, sx, sy);
+  }
+}
+
+// 박스 클릭 핸들 연결
+function wireClicks(){
+  overlay.querySelectorAll('.box').forEach(box=>{
+    box.addEventListener('click', ()=>{
+      overlay.querySelectorAll('.box').forEach(b=>b.classList.remove('active'));
+      box.classList.add('active');
+      currentSentence = box.dataset.text || "";
+      openMainPopoverFor(box, currentSentence);
+    });
+  });
+}
+
+// ---------- 메인 팝업 ----------
 function openMainPopoverFor(anchorEl, text){
   pop.hidden = false;
+
+  // 초기화
   origSpan.textContent = text;
   rubyDiv.textContent = '';
   transDiv.textContent = '';
   morphWrap.innerHTML = '';
 
+  // 배치
   placeMainPopover(anchorEl, pop, 8);
 
   // 탭 초기화
@@ -78,8 +120,7 @@ function openMainPopoverFor(anchorEl, text){
   tabs[0].classList.add('active');
   panels.forEach(p=>p.hidden = (p.dataset.tabpanel!=='orig'));
 
-  // 형태소 토큰(간단: 공백 기준) 클릭 → 서브팝업
-  morphWrap.innerHTML = "";
+  // 형태소(임시: 공백 분리) → 클릭 시 서브팝업
   text.split(/\s+/).forEach(tok=>{
     if(!tok) return;
     const span = document.createElement('span');
@@ -89,11 +130,10 @@ function openMainPopoverFor(anchorEl, text){
     morphWrap.appendChild(span);
   });
 
-  // 후리가나/번역은 탭 열릴 때 지연 호출
+  // 후리가나/번역 지연 호출
   pop.querySelector('button[data-tab="ruby"]').onclick = async ()=>{
     if (!rubyDiv.textContent) {
       const r = await getFurigana(currentSentence);
-      // API 응답 포맷에 맞춰 간단 렌더
       rubyDiv.innerHTML = (r.tokens || r.result || [])
         .map(t => t.reading ? `<ruby>${escapeHtml(t.surface)}<rt>${escapeHtml(t.reading)}</rt></ruby>` : escapeHtml(t.surface||''))
         .join('');
@@ -122,15 +162,16 @@ function openMainPopoverFor(anchorEl, text){
   };
 }
 
+// ---------- 서브 팝업 ----------
 async function openSubForToken(tokenEl, token){
   currentTokenEl = tokenEl;
-  // 내용(예: 내 한자 라이브러리 연결 전까지 임시 뷰)
-  const isHanja = token.length===1;
   sub.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
       <strong style="font-size:16px">${escapeHtml(token)}</strong>
       <div style="display:flex;gap:8px">
-        ${isHanja ? `<a class="ext" href="javascript:void(0)" id="openHanja">네이버 한자</a>` : `<a class="ext" href="javascript:void(0)" id="openLemma">네이버 사전</a>`}
+        ${token.length===1
+          ? `<a class="ext" href="javascript:void(0)" id="openHanja">네이버 한자</a>`
+          : `<a class="ext" href="javascript:void(0)" id="openLemma">네이버 사전</a>`}
       </div>
     </div>
     <div style="margin-top:8px; line-height:1.6">
@@ -146,24 +187,18 @@ async function openSubForToken(tokenEl, token){
   if (openHanja) openHanja.onclick = ()=> openNaverHanja(token);
 }
 
-// 유틸
+// ---------- 유틸 & 리스너 ----------
 function escapeHtml(s){
   return (s??'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 }
 
-// 뷰포트 변화 시 재배치(팝업 열려있을 때)
-globalThis.visualViewport?.addEventListener('resize', ()=>{
-  if (!pop.hidden && document.querySelector('.box.active')) placeMainPopover(document.querySelector('.box.active'), pop, 8);
+// 화면/뷰포트 변화 시 재렌더 + 팝업 재배치
+const onViewportChange = ()=>{
+  renderOverlay();
+  const active = overlay.querySelector('.box.active');
+  if (!pop.hidden && active) placeMainPopover(active, pop, 8);
   if (!sub.hidden && currentTokenEl) placeSubDetached(pop, currentTokenEl, sub, 8);
-}, { passive:true });
-window.addEventListener('scroll', ()=>{
-  if (!pop.hidden && document.querySelector('.box.active')) placeMainPopover(document.querySelector('.box.active'), pop, 8);
-  if (!sub.hidden && currentTokenEl) placeSubDetached(pop, currentTokenEl, sub, 8);
-}, { passive:true });
-
-// 클릭된 박스에 active 표시 유지
-overlay.addEventListener('click', e=>{
-  overlay.querySelectorAll('.box').forEach(b=>b.classList.remove('active'));
-  const t = e.target.closest('.box');
-  if (t) t.classList.add('active');
-});
+};
+window.addEventListener('resize', onViewportChange, { passive:true });
+globalThis.visualViewport?.addEventListener('resize', onViewportChange, { passive:true });
+window.addEventListener('scroll', onViewportChange, { passive:true });
