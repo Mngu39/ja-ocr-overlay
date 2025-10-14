@@ -19,14 +19,23 @@
   </main>
 
   <!-- 메인 팝업 -->
+  <!-- 메인 팝업: 상단 루비(작게) + 원문(클릭가능) + 번역 -->
   <div id="pop" class="pop" hidden>
     <div class="pop-arrow"></div>
-    <div class="pop-body">
-      <div class="pop-tabs">
-        <button data-tab="orig" class="active">원문</button>
-        <button data-tab="ruby">ふりがな</button>
-        <button data-tab="trans">번역</button>
+    <div class="pop-body slim">
+      <div class="ruby-line" id="rubyLine"></div>
+      <div class="orig-line" id="origLine"></div>
+      <div class="trans-line" id="transLine"></div>
+      <div class="edit-line">
+        <button id="editBtn" class="tiny">✎</button>
+        <div id="editArea" class="edit" hidden>
+          <textarea id="editInput"></textarea>
+          <button id="saveEdit" class="tiny primary">저장</button>
+          <button id="cancelEdit" class="tiny">취소</button>
+        </div>
       </div>
+    </div>
+  </div>
 
       <div class="section section-original" data-tabpanel="orig">
         <div class="orig-line">
