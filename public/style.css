@@ -25,10 +25,12 @@ html,body{
 #app{ display:flex; flex-direction:column; gap:8px; padding:10px; }
 
 /* Stage: 이미지와 오버레이 컨테이너 */
-#stage{
-  position:relative; margin:0 auto; max-width:min(96vw,1800px);
-  background:#000; border-radius:8px; overflow:hidden;
-}
+  #stage{
+    position:relative; margin:0 auto;
+    /* 폭을 CSS가 책임지게 하고, JS가 건드리지 않도록 고정 */
+    width: min(96vw, 1800px);
+    background:#000; border-radius:8px; overflow:hidden;
+  }
 #img{ display:block; width:100%; height:auto; user-select:none; -webkit-user-drag:none; }
 
 #overlay{ position:absolute; inset:0; pointer-events:auto; }
