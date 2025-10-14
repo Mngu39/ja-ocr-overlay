@@ -25,20 +25,23 @@ export async function ocrJapanese(src){
   return annos;
 }
 
-// 박스 DOM 생성
-export function drawBoxes(annos, overlayEl){
+// 박스 DOM 생성 (표시 크기에 맞게 스케일)
+export function drawBoxes(annos, overlayEl, sx = 1, sy = 1){
   overlayEl.innerHTML = "";
   for (const a of annos) {
     const [p0,p1,p2,p3] = a.polygon;
+    const left   = Math.min(p0[0], p3[0]) * sx;
+    const top    = Math.min(p0[1], p1[1]) * sy;
+    const right  = Math.max(p1[0], p2[0]) * sx;
+    const bottom = Math.max(p2[1], p3[1]) * sy;
+
     const box = document.createElement('div');
     box.className = 'box';
-    // bbox로 변환
-    const left = Math.min(p0[0], p3[0]);
-    const top  = Math.min(p0[1], p1[1]);
-    const right= Math.max(p1[0], p2[0]);
-    const bottom=Math.max(p2[1], p3[1]);
-    Object.assign(box.style,{
-      left: left+'px', top: top+'px', width:(right-left)+'px', height:(bottom-top)+'px'
+    Object.assign(box.style, {
+      left:  left + 'px',
+      top:   top + 'px',
+      width: (right - left) + 'px',
+      height:(bottom - top) + 'px'
     });
     box.dataset.text = a.text;
     overlayEl.appendChild(box);
