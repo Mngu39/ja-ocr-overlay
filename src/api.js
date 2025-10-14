@@ -2,7 +2,7 @@
 const FURIGANA_URL = "https://furigana-api-345684237835.asia-northeast3.run.app/furigana";
 const DEEPL_URL    = "https://solitary-mud-8caf.rlaalsrbr.workers.dev/translate";
 // 이미지 임시저장 워커 (업로드는 단축어가 담당; 여긴 조회만)
-const WORKER_BASE  = "https://plain-queen-cd05.rlaalsrbr.workers.dev";
+const WORKER_BASE  = "https://icy-paper-e469.rlaalsrbr.workers.dev";
 
 export async function getImageById(id){
   const url = `${WORKER_BASE}/ocr/file/${encodeURIComponent(id)}`;
