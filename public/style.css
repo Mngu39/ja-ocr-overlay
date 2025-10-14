@@ -9,14 +9,17 @@
 }
 
 *{ box-sizing:border-box; }
-html,body{ margin:0; padding:0; background:#000; color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans CJK JP","Noto Sans JP",sans-serif; }
+html,body{
+  margin:0; padding:0; background:#000; color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
+    "Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans CJK JP","Noto Sans JP",sans-serif;
+}
 
 .topbar{
-  position:sticky; top:0; z-index:10;
-  height:44px; display:flex; align-items:center; padding:0 12px;
+  position:sticky; top:0; z-index:10; height:44px;
+  display:flex; align-items:center; padding:0 12px;
   background:rgba(0,0,0,.7); backdrop-filter:saturate(140%) blur(6px);
-  border-bottom:1px solid var(--border);
-  font-weight:600; letter-spacing:.2px;
+  border-bottom:1px solid var(--border); font-weight:600; letter-spacing:.2px;
 }
 
 #app{ display:flex; flex-direction:column; gap:8px; padding:10px; }
@@ -28,52 +31,47 @@ html,body{ margin:0; padding:0; background:#000; color:var(--fg); font-family:-a
 }
 #img{ display:block; width:100%; height:auto; user-select:none; -webkit-user-drag:none; }
 
-#overlay{
-  position:absolute; inset:0; pointer-events:auto;
-}
+#overlay{ position:absolute; inset:0; pointer-events:auto; }
 
 /* 안내 텍스트 */
-.hint{
-  text-align:center; color:var(--muted); font-size:14px; padding:4px 0;
-}
+.hint{ text-align:center; color:var(--muted); font-size:14px; padding:4px 0; }
 
 /* ==== OCR Boxes =========================================================== */
 .box{
   position:absolute; pointer-events:auto;
   border:2px solid rgba(0,180,255,.55);
-  border-radius:6px;
-  background:transparent;
+  border-radius:6px; background:transparent;
 }
 .box:hover{ border-color:rgba(0,200,255,.8); }
 .box.active{ outline:2px solid rgba(0,150,255,.6); }
 
 /* ==== Main Popover ======================================================== */
 .pop{
-  position:absolute; inset:auto auto 0 0; /* 실제 위치는 JS가 배치 */
+  position:absolute; inset:auto auto 0 0; /* 실제 위치는 JS에서 배치 */
   z-index:50; background:var(--card); color:var(--fg);
   border:1px solid var(--border); border-radius:12px;
   box-shadow:0 8px 30px rgba(0,0,0,.5);
-  max-width:min(640px,92vw);
+  max-width:min(900px,96vw); /* 더 넉넉하게 */
 }
 .pop[hidden]{ display:none !important; }
 
 .pop-arrow{
   position:absolute; width:16px; height:16px; transform:rotate(45deg);
   background:var(--card); border-left:1px solid var(--border); border-top:1px solid var(--border);
-  /* JS에서 top/bottom/left/right 조정 */
+  /* top/bottom/left/right는 JS에서 조정 */
 }
 
 .pop .pop-body{
   padding:10px 12px; display:flex; flex-direction:column; gap:8px;
 }
 
-/* 루비/원문/번역 — Sudachi 번역기 스타일 */
+/* 루비/원문/번역 — 한 화면 */
 .ruby-line{
-  font-size:12px; opacity:.85; line-height:1.25; word-break:break-word;
+  font-size:13px; opacity:.85; line-height:1.25; word-break:break-word;
   user-select:none; -webkit-user-select:none;
 }
 .orig-line{
-  font-size:16px; line-height:1.6; word-break:break-word;
+  font-size:18px; line-height:1.6; word-break:break-word;
   user-select:none; -webkit-user-select:none;
 }
 .orig-line .tok{
@@ -82,7 +80,7 @@ html,body{ margin:0; padding:0; background:#000; color:var(--fg); font-family:-a
 .orig-line .tok:hover{ border-bottom-color:currentColor; }
 
 .trans-line{
-  font-size:14px; opacity:.95; line-height:1.45; white-space:pre-wrap; word-break:break-word;
+  font-size:16px; opacity:.95; line-height:1.45; white-space:pre-wrap; word-break:break-word;
 }
 
 /* 편집 라인 */
@@ -123,12 +121,12 @@ a.ext:hover{ background:#0e2334; }
 
 /* 작은 화면 보정 */
 @media (max-width: 480px){
-  .pop{ max-width:94vw; }
-  .orig-line{ font-size:15px; }
-  .trans-line{ font-size:13px; }
+  .pop{ max-width:96vw; }
+  .orig-line{ font-size:17px; }
+  .trans-line{ font-size:15px; }
 }
 
-/* iPad Safari 상단/하단 안전 여백 */
+/* iPad Safari 안전 여백 */
 @supports (padding: max(0px)) {
   body{ padding-bottom: max(env(safe-area-inset-bottom), 0px); }
 }
