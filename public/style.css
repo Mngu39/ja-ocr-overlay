@@ -51,7 +51,7 @@ html,body{
   z-index:50; background:var(--card); color:var(--fg);
   border:1px solid var(--border); border-radius:12px;
   box-shadow:0 8px 30px rgba(0,0,0,.5);
-  max-width:min(900px,96vw); /* 더 넉넉하게 */
+  max-width:min(900px,96vw);
 }
 .pop[hidden]{ display:none !important; }
 
@@ -83,20 +83,29 @@ html,body{
   font-size:16px; opacity:.95; line-height:1.45; white-space:pre-wrap; word-break:break-word;
 }
 
-/* 편집 라인 */
+/* 편집 버튼 라인 */
 .edit-line{ display:flex; align-items:center; gap:6px; }
-.edit{ display:flex; flex-direction:column; gap:6px; width:100%; }
-.edit textarea{
-  width:100%; min-height:64px; max-height:40vh; resize:vertical;
+
+/* ==== Edit Sheet (수정 팝업, 메인팝업 안에서 떠 있는 시트) ============== */
+.edit-sheet{
+  position:absolute; inset:8px; z-index:70;
+  background:#0f1116; border:1px solid var(--border); border-radius:12px;
+  box-shadow:0 8px 28px rgba(0,0,0,.55);
+  display:flex; flex-direction:column; gap:10px; padding:12px;
+}
+.edit-sheet .sheet-title{ font-weight:700; font-size:14px; opacity:.9; }
+.edit-sheet textarea{
+  width:100%; min-height:88px; max-height:40vh; resize:vertical;
   border-radius:8px; border:1px solid var(--border); background:#0d0e12; color:var(--fg);
-  padding:8px 10px; font-size:14px; line-height:1.5;
+  padding:10px 12px; font-size:16px; line-height:1.5;
 }
-.tiny{
+.edit-sheet .actions{ display:flex; gap:8px; justify-content:flex-end; }
+.btn{
   appearance:none; border:1px solid var(--border); background:#111318; color:var(--fg);
-  border-radius:10px; padding:6px 10px; font-size:13px;
+  border-radius:10px; padding:8px 12px; font-size:14px;
 }
-.tiny.primary{ border-color:transparent; background:var(--accent); color:#001525; font-weight:600; }
-.tiny:active{ transform:translateY(1px); }
+.btn.primary{ border-color:transparent; background:var(--accent); color:#001525; font-weight:700; }
+.btn:active{ transform:translateY(1px); }
 
 /* ==== Sub Popover (형태소 설명) ========================================= */
 .subpop{
