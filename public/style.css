@@ -1,143 +1,43 @@
-/* ==== Base / Layout ======================================================= */
 :root{
-  --bg:#0b0b0d;
-  --fg:#e7e7ea;
-  --muted:#a9acb3;
-  --card:#18181c;
-  --border:rgba(255,255,255,.12);
-  --accent:#3aa3ff;
+  --bg:#0b0b0c; --ink:#e8e8ea; --muted:#a9abb3; --accent:#4da3ff;
+  --box:#4da3ff; --box-active:#00d4ff; --pop:#141417; --border:#2a2a31;
 }
-
 *{ box-sizing:border-box; }
-html,body{
-  margin:0; padding:0; background:#000; color:var(--fg);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
-    "Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans CJK JP","Noto Sans JP",sans-serif;
-}
+html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans CJK KR", "Noto Sans JP", "Malgun Gothic", sans-serif; }
+#stage{ position:relative; width:100%; min-height:100vh; display:grid; place-items:center; padding:10px; }
 
-.topbar{
-  position:sticky; top:0; z-index:10; height:44px;
-  display:flex; align-items:center; padding:0 12px;
-  background:rgba(0,0,0,.7); backdrop-filter:saturate(140%) blur(6px);
-  border-bottom:1px solid var(--border); font-weight:600; letter-spacing:.2px;
-}
+#img{ max-width:100%; height:auto; display:block; border-radius:10px; box-shadow:0 6px 30px rgba(0,0,0,.4); }
+#overlay{ position:absolute; inset:0; margin:auto; pointer-events:auto; }
+#hint{ position:absolute; left:0; right:0; bottom:18px; text-align:center; color:var(--muted); font-size:14px; }
 
-#app{ display:flex; flex-direction:column; gap:8px; padding:10px; }
+.box{ position:absolute; border:2px solid var(--box); border-radius:10px; background:transparent; cursor:pointer; }
+.box.active{ border-color:var(--box-active); box-shadow:0 0 0 2px rgba(0,212,255,.25) inset; }
 
-/* Stage: 이미지와 오버레이 컨테이너 */
-  #stage{
-    position:relative; margin:0 auto;
-    /* 폭을 CSS가 책임지게 하고, JS가 건드리지 않도록 고정 */
-    width: min(96vw, 1800px);
-    background:#000; border-radius:8px; overflow:hidden;
-  }
-#img{ display:block; width:100%; height:auto; user-select:none; -webkit-user-drag:none; }
+.popover{ position:absolute; max-width:min(92vw, 900px); background:var(--pop); color:var(--ink);
+  border:1px solid var(--border); border-radius:14px; padding:12px; box-shadow:0 12px 40px rgba(0,0,0,.5); z-index:50; }
+.pop-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 0 6px; }
+.sep{ border:none; border-top:1px solid var(--border); margin:8px 0; }
 
-#overlay{ position:absolute; inset:0; pointer-events:auto; }
+.ruby-line{ line-height:1.6; font-size:16px; color:#cfd4ff; word-break:break-word; }
+.ruby-line ruby{ ruby-position:over; ruby-align:center; }
+.ruby-line rt{ font-size:12px; color:#9fb3ff; }
 
-/* 안내 텍스트 */
-.hint{ text-align:center; color:var(--muted); font-size:14px; padding:4px 0; }
+.orig-line{ line-height:1.8; font-size:18px; word-break:break-word; }
+.orig-line .tok{ padding:2px 4px; border-radius:6px; }
+.orig-line .tok:hover{ background:#1f2433; cursor:pointer; }
 
-/* ==== OCR Boxes =========================================================== */
-.box{
-  position:absolute; pointer-events:auto;
-  border:2px solid rgba(0,180,255,.55);
-  border-radius:6px; background:transparent;
-}
-.box:hover{ border-color:rgba(0,200,255,.8); }
-.box.active{ outline:2px solid rgba(0,150,255,.6); }
+.trans-line{ font-size:18px; line-height:1.7; color:#e7f6ff; word-break:break-word; }
 
-/* ==== Main Popover ======================================================== */
-.pop{
-  position:absolute; inset:auto auto 0 0; /* 실제 위치는 JS에서 배치 */
-  z-index:50; background:var(--card); color:var(--fg);
-  border:1px solid var(--border); border-radius:12px;
-  box-shadow:0 8px 30px rgba(0,0,0,.5);
-  max-width:min(900px,96vw);
-}
-.pop[hidden]{ display:none !important; }
+.btn{ background:var(--accent); color:#021323; border:none; padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer; }
+.btn.ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); }
+.btn.sm{ padding:6px 10px; font-size:12px; }
 
-.pop-arrow{
-  position:absolute; width:16px; height:16px; transform:rotate(45deg);
-  background:var(--card); border-left:1px solid var(--border); border-top:1px solid var(--border);
-  /* top/bottom/left/right는 JS에서 조정 */
-}
+.subpop{ position:absolute; max-width:70vw; background:var(--pop); color:var(--ink);
+  border:1px solid var(--border); border-radius:12px; padding:8px 10px; z-index:60; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+.subpop a{ color:#9bd1ff; text-decoration:none; }
+.subpop a:hover{ text-decoration:underline; }
 
-.pop .pop-body{
-  padding:10px 12px; display:flex; flex-direction:column; gap:8px;
-}
-
-/* 루비/원문/번역 — 한 화면 */
-.ruby-line{
-  font-size:13px; opacity:.85; line-height:1.25; word-break:break-word;
-  user-select:none; -webkit-user-select:none;
-}
-.orig-line{
-  font-size:18px; line-height:1.6; word-break:break-word;
-  user-select:none; -webkit-user-select:none;
-}
-.orig-line .tok{
-  cursor:pointer; border-bottom:1px dotted transparent; transition:border-color .15s ease;
-}
-.orig-line .tok:hover{ border-bottom-color:currentColor; }
-
-.trans-line{
-  font-size:16px; opacity:.95; line-height:1.45; white-space:pre-wrap; word-break:break-word;
-}
-
-/* 편집 버튼 라인 */
-.edit-line{ display:flex; align-items:center; gap:6px; }
-
-/* ==== Edit Sheet (수정 팝업, 메인팝업 안에서 떠 있는 시트) ============== */
-.edit-sheet{
-  position:absolute; inset:8px; z-index:70;
-  background:#0f1116; border:1px solid var(--border); border-radius:12px;
-  box-shadow:0 8px 28px rgba(0,0,0,.55);
-  display:flex; flex-direction:column; gap:10px; padding:12px;
-}
-.edit-sheet .sheet-title{ font-weight:700; font-size:14px; opacity:.9; }
-.edit-sheet textarea{
-  width:100%; min-height:88px; max-height:40vh; resize:vertical;
-  border-radius:8px; border:1px solid var(--border); background:#0d0e12; color:var(--fg);
-  padding:10px 12px; font-size:16px; line-height:1.5;
-}
-.edit-sheet .actions{ display:flex; gap:8px; justify-content:flex-end; }
-.btn{
-  appearance:none; border:1px solid var(--border); background:#111318; color:var(--fg);
-  border-radius:10px; padding:8px 12px; font-size:14px;
-}
-.btn.primary{ border-color:transparent; background:var(--accent); color:#001525; font-weight:700; }
-.btn:active{ transform:translateY(1px); }
-
-/* ==== Sub Popover (형태소 설명) ========================================= */
-.subpop{
-  position:absolute; z-index:60; background:#111318; color:var(--fg);
-  border:1px solid var(--border); border-radius:10px; padding:8px 10px;
-  max-width:min(420px,92vw); box-shadow:0 8px 30px rgba(0,0,0,.5);
-}
-.subpop[hidden]{ display:none !important; }
-
-/* 꼬리(삼각형) */
-.tail-svg{
-  position:absolute; z-index:59; pointer-events:none;
-  width:14px; height:14px; fill:#111318; stroke:var(--border);
-}
-
-/* 외부 링크 버튼(서브팝업 내부) */
-a.ext{ font-size:12px; color:#8bc7ff; text-decoration:none; padding:2px 6px; border-radius:6px; background:#0b1a26; }
-a.ext:hover{ background:#0e2334; }
-
-/* ==== Utility ============================================================= */
-.hidden{ display:none !important; }
-
-/* 작은 화면 보정 */
-@media (max-width: 480px){
-  .pop{ max-width:96vw; }
-  .orig-line{ font-size:17px; }
-  .trans-line{ font-size:15px; }
-}
-
-/* iPad Safari 안전 여백 */
-@supports (padding: max(0px)) {
-  body{ padding-bottom: max(env(safe-area-inset-bottom), 0px); }
-}
+dialog{ border:none; border-radius:12px; background:var(--pop); color:var(--ink); }
+.edit-form{ display:flex; flex-direction:column; gap:8px; min-width:min(86vw, 560px); }
+textarea{ width:100%; background:#11121a; color:var(--ink); border:1px solid var(--border); border-radius:10px; padding:8px; font-size:16px; }
+menu{ display:flex; justify-content:flex-end; gap:8px; margin:0; padding:0; }
