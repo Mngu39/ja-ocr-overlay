@@ -3,7 +3,6 @@ export const WORKER_BASE = "https://icy-paper-e469.rlaalsrbr.workers.dev";
 export async function getImageById(id){
   return `${WORKER_BASE}/image?id=${encodeURIComponent(id)}`;
 }
-
 export async function gcvOCR(id){
   const r = await fetch(`${WORKER_BASE}/gcv/ocr`, {
     method:"POST", headers:{ "content-type":"application/json" },
@@ -13,7 +12,7 @@ export async function gcvOCR(id){
   const j = await r.json(); return j.annos || [];
 }
 
-// ▼ 후리가나/번역도 Worker 프록시로 호출
+// ▼ 모두 Worker 경유(Cloud Run/DeepL 호출은 Worker가 담당)
 export async function getFurigana(text){
   const r = await fetch(`${WORKER_BASE}/run/furigana`, {
     method:"POST", headers:{ "content-type":"application/json" },
@@ -28,7 +27,7 @@ export async function translateJaKo(text){
     body: JSON.stringify({ src:"ja", tgt:"ko", text })
   });
   if(!r.ok) throw new Error("translate failed");
-  return await r.json();
+  return await r.json(); // {text, result}
 }
 
 export function openNaverJaLemma(term){
