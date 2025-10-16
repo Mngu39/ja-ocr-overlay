@@ -1,16 +1,15 @@
-// app.js — overlay 부트스트랩 + 팝업/토큰/연결모드
+// ✅ 기존 import 유지
 import { getImageById, gcvOCR, furigana, translateJaKo } from "./api.js";
 import { placeMainPopup, placeSubPopup } from "./place.js";
 
-// ────────────────────────────────────────────────────────────
-// 유틸
-const esc = (s="") => s.replace(/[&<>"']/g, m=>({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[m]));
+/* -------------------- 최소 유틸 (추가) -------------------- */
+const esc = (s="") => s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
 const kataToHira = (s="") => s.replace(/[\u30a1-\u30f6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
 const hasKanji = (s="") => /[\u4E00-\u9FFF]/.test(s);
 
-// 토큰 → ru​by HTML (각 토큰을 .tok 래퍼로 감싸 클릭 대상 고정)
-function buildRuby(tokens) {
-  return tokens.map((t, i) => {
+/** 토큰 → ruby HTML (형태소 클릭 가능하도록 .tok 래퍼) */
+function buildRuby(tokens){
+  return tokens.map((t,i)=>{
     const surf = t.surface || t.text || t.form || t.word || "";
     const read = kataToHira(t.reading || t.read || t.yomi || "");
     const body = (hasKanji(surf) && read)
@@ -20,250 +19,220 @@ function buildRuby(tokens) {
   }).join("");
 }
 
-// 서브팝업 콘텐츠(간단형 – 필요 시 확장)
-function buildSubPopupHTML(t) {
-  const surf = t.surface || t.text || t.form || t.word || "";
-  const read = kataToHira(t.reading || t.read || t.yomi || "");
-  const base = t.base || t.lemma || t.dictionary_form || "";
-  const pos  = t.pos || t.partOfSpeech || t.tag || "";
-  const navLink = hasKanji(surf)
-    ? `<a class="ext" href="https://hanja.dict.naver.com/search?query=${encodeURIComponent(surf)}" target="_blank" rel="noopener">네이버 사전</a>`
-    : "";
-  return `
-    <div class="sub-wrap">
-      <div class="sub-h"><span>형태소</span></div>
-      <div class="sub-row"><b>표면</b> ${esc(surf)}</div>
-      <div class="sub-row"><b>독음</b> ${esc(read)}</div>
-      ${base ? `<div class="sub-row"><b>원형</b> ${esc(base)}</div>` : ""}
-      ${pos  ? `<div class="sub-row"><b>품사</b> ${esc(pos)}</div>` : ""}
-      <div class="sub-actions">${navLink}</div>
-    </div>`;
-}
-
-// ────────────────────────────────────────────────────────────
-// 전역 상태
+/* -------------------- 전역 상태 (추가) -------------------- */
 const S = {
-  imgEl: null,
-  viewW: 0,
-  viewH: 0,
   annos: [],
+  imgEl: null,
+  vw: 0, vh: 0,
   // 연결 모드 누적
-  agg: { ids: [], text: "" },
+  aggText: "",
+  // 팝업/서브팝업
   popupEl: null,
   subEl: null,
-  lastTokens: [],
-  // 현재 기준 박스(bbox) — 팝업 위치 계산용
-  anchorBox: null
+  // 마지막 토큰(서브팝업 데이터)
+  tokens: [],
+  // 팝업 기준 박스(상/하 배치용)
+  anchorBox: null,
 };
 
-// 문장상자 DOM 그리기 (bbox: polygon→rect 추정)
-function drawBoxes(annos) {
-  const layer = document.getElementById("boxes") || (() => {
-    const d = document.createElement("div");
-    d.id = "boxes";
-    d.className = "boxes-layer";
-    document.body.appendChild(d);
-    return d;
-  })();
+/* -------------------- 박스 그리기 (기존 함수에 이벤트만 연결) -------------------- */
+function drawBoxes(annos){
+  let layer = document.getElementById("boxes");
+  if(!layer){
+    layer = document.createElement("div");
+    layer.id = "boxes";
+    layer.className = "boxes-layer";
+    document.body.appendChild(layer);
+  }
   layer.innerHTML = "";
-  annos.forEach((a, idx) => {
+
+  annos.forEach((a, idx)=>{
     const vs = a.polygon || [];
-    const xs = vs.map(v => v[0]); const ys = vs.map(v => v[1]);
+    const xs = vs.map(v=>v[0]); const ys = vs.map(v=>v[1]);
     const x = Math.min(...xs), y = Math.min(...ys);
     const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
 
-    const b = document.createElement("div");
-    b.className = "box";
-    b.style.left = `${x}px`; b.style.top = `${y}px`;
-    b.style.width = `${w}px`; b.style.height = `${h}px`;
-    b.dataset.idx = idx;
+    const el = document.createElement("div");
+    el.className = "box";
+    el.style.left = `${x}px`; el.style.top = `${y}px`;
+    el.style.width = `${w}px`; el.style.height = `${h}px`;
+    el.dataset.idx = idx;
 
-    // 박스 탭 → 연결모드 반영
-    b.addEventListener("click", (ev) => {
+    // ✅ 최소 변경: 박스 클릭 시 연결 모드 동작
+    el.addEventListener("click", (ev)=>{
       ev.stopPropagation();
-      onBoxTap(a, { x, y, w, h });
+      onBoxTap(a, {x,y,w,h});
     });
 
-    layer.appendChild(b);
+    layer.appendChild(el);
   });
 }
 
-// 팝업 생성 (닫기 버튼만으로 닫힘)
-function createPopupEl() {
-  const el = document.createElement("div");
-  el.className = "main-popup";
-  el.innerHTML = `
-    <div class="mp-head">
-      <div class="mp-title">원문</div>
-      <div class="mp-actions">
-        <button class="btn sm" data-act="edit">수정</button>
-        <button class="btn sm danger" data-act="close">닫기</button>
+/* -------------------- 팝업 최소 구현 (중복 제거) -------------------- */
+function ensurePopup(anchorBox){
+  if (!S.popupEl){
+    const el = document.createElement("div");
+    el.className = "main-popup";
+    el.innerHTML = `
+      <div class="mp-head">
+        <div class="mp-title">원문</div>
+        <div class="mp-actions">
+          <button class="btn sm" data-act="edit">수정</button>
+          <button class="btn sm danger" data-act="close">닫기</button>
+        </div>
       </div>
-    </div>
-    <div class="mp-orig"></div>
-    <div class="mp-sec">
-      <div class="mp-st">번역</div>
-      <div class="mp-trans"></div>
-    </div>
-  `;
-  document.body.appendChild(el);
-  // 닫기
-  el.querySelector('[data-act="close"]').onclick = () => closePopup();
-  // 수정
-  el.querySelector('[data-act="edit"]').onclick = () => openEdit();
-  // 바깥 클릭으로 닫지 않음(no backdrop close)
-  return el;
-}
+      <div class="mp-orig"></div>
+      <div class="mp-sec">
+        <div class="mp-st">번역</div>
+        <div class="mp-trans"></div>
+      </div>
+    `;
+    // 닫기 버튼으로만 닫힘 (배경 탭 닫기 없음)
+    el.querySelector('[data-act="close"]').onclick = closePopup;
+    el.querySelector('[data-act="edit"]').onclick = openEdit;
+    document.body.appendChild(el);
+    S.popupEl = el;
 
-// 팝업 열기(새 세션 시작)
-function openPopup(anchorBox) {
-  if (S.popupEl) S.popupEl.remove();
-  S.popupEl = createPopupEl();
+    // ✅ 루비(원문)에서만 형태소 서브팝업
+    el.querySelector(".mp-orig").addEventListener("click", (e)=>{
+      const tokEl = e.target.closest(".tok");
+      if(!tokEl) return;
+      const i = +tokEl.dataset.i;
+      const tok = S.tokens[i] || {};
+      showSubPopup(tok);
+    });
+  }
   S.anchorBox = anchorBox;
-  placeMainPopup(S.popupEl, anchorBox, { vw: S.viewW, vh: S.viewH }); // 상/하 배치
+  // 상/하 배치 (기존 place.js 로직 사용)
+  placeMainPopup(S.popupEl, anchorBox, { vw:S.vw, vh:S.vh });
 }
 
-// 팝업 닫기(연결모드 리셋)
-function closePopup() {
-  S.agg = { ids: [], text: "" };
-  S.lastTokens = [];
-  if (S.subEl) { S.subEl.remove(); S.subEl = null; }
-  if (S.popupEl) { S.popupEl.remove(); S.popupEl = null; }
+function closePopup(){
+  if (S.subEl){ S.subEl.remove(); S.subEl=null; }
+  if (S.popupEl){ S.popupEl.remove(); S.popupEl=null; }
+  S.aggText = "";
+  S.tokens = [];
   S.anchorBox = null;
 }
 
-// 수정 팝업(간단 인라인)
-function openEdit() {
-  if (!S.popupEl) return;
-  const areaId = "mp-edit-area";
-  const orig = S.popupEl.querySelector(".mp-orig");
-  const now = S.agg.text;
-  const dlg = document.createElement("div");
-  dlg.className = "edit-dlg";
-  dlg.innerHTML = `
-    <textarea id="${areaId}" rows="4">${esc(now)}</textarea>
+function openEdit(){
+  if(!S.popupEl) return;
+  const wrap = document.createElement("div");
+  wrap.className = "edit-dlg";
+  wrap.innerHTML = `
+    <textarea rows="4">${esc(S.aggText)}</textarea>
     <div class="edit-actions">
       <button class="btn sm" data-act="apply">적용</button>
       <button class="btn sm danger" data-act="cancel">취소</button>
     </div>
   `;
-  // 임시로 원문영역 위에 띄움
-  orig.before(dlg);
-  dlg.querySelector('[data-act="apply"]').onclick = async () => {
-    const nv = dlg.querySelector("textarea").value.trim();
-    if (nv) {
-      S.agg.text = nv;
-      await refreshPopupContents(); // 후리가나/번역 재생성
+  const orig = S.popupEl.querySelector(".mp-orig");
+  orig.before(wrap);
+  wrap.querySelector('[data-act="apply"]').onclick = async ()=>{
+    const v = wrap.querySelector("textarea").value.trim();
+    if (v){
+      S.aggText = v;
+      await refreshPopupContents();
     }
-    dlg.remove();
+    wrap.remove();
   };
-  dlg.querySelector('[data-act="cancel"]').onclick = () => dlg.remove();
+  wrap.querySelector('[data-act="cancel"]').onclick = ()=> wrap.remove();
 }
 
-// 원문(ru​by) 클릭 시 서브팝업 — 형태소는 ru​by에만 부착됨
-function wireTokenClicks() {
-  const container = S.popupEl?.querySelector(".mp-orig");
-  if (!container) return;
-  container.onclick = (e) => {
-    const tEl = e.target.closest(".tok");
-    if (!tEl) return;
-    const i = +tEl.dataset.i;
-    const tok = S.lastTokens[i] || {};
-    showSubPopup(tok);
-  };
-}
-
-// 서브팝업 표시(메인팝업 외측 하단 고정)
-function showSubPopup(tok) {
-  if (!S.popupEl) return;
-  if (!S.subEl) {
+/* -------------------- 서브팝업 (루비 토큰 전용) -------------------- */
+function showSubPopup(t){
+  if(!S.popupEl) return;
+  if(!S.subEl){
     S.subEl = document.createElement("div");
     S.subEl.className = "sub-popup";
     document.body.appendChild(S.subEl);
   }
-  S.subEl.innerHTML = buildSubPopupHTML(tok);
-  placeSubPopup(S.subEl, S.popupEl); // detached-bottom 고정
+  const surf = t.surface || t.text || t.form || t.word || "";
+  const read = kataToHira(t.reading || t.read || t.yomi || "");
+  const base = t.base || t.lemma || t.dictionary_form || "";
+  const pos  = t.pos  || t.partOfSpeech || t.tag || "";
+
+  S.subEl.innerHTML = `
+    <div class="sub-wrap">
+      <div class="sub-h"><span>형태소</span></div>
+      <div class="sub-row"><b>표면</b> ${esc(surf)}</div>
+      <div class="sub-row"><b>독음</b> ${esc(read)}</div>
+      ${base? `<div class="sub-row"><b>원형</b> ${esc(base)}</div>`:""}
+      ${pos ? `<div class="sub-row"><b>품사</b> ${esc(pos)}</div>`:""}
+      ${ hasKanji(surf)
+        ? `<div class="sub-actions"><a class="ext" target="_blank" rel="noopener" href="https://hanja.dict.naver.com/search?query=${encodeURIComponent(surf)}">네이버 사전</a></div>`
+        : "" }
+    </div>`;
+  placeSubPopup(S.subEl, S.popupEl); // detached-bottom
 }
 
-// 현재 누적 텍스트로 후리가나/번역 갱신
-async function refreshPopupContents() {
-  if (!S.popupEl) return;
-  const t = S.agg.text;
+/* -------------------- 후리가나/번역 갱신 (중복 제거 핵심) -------------------- */
+async function refreshPopupContents(){
+  if(!S.popupEl) return;
+  const t = S.aggText;
 
-  // 후리가나
-  let rubi;
-  try {
-    rubi = await furigana(t);
-  } catch (e) {
-    rubi = {};
-  }
+  // 후리가나(= 루비 한 번만 렌더)
+  let rubi = {};
+  try { rubi = await furigana(t); } catch {}
   const tokens = (
     rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes ||
     rubi?.data?.tokens || rubi?.data?.morphs || []
   );
-  S.lastTokens = tokens;
+  S.tokens = tokens;
   S.popupEl.querySelector(".mp-orig").innerHTML = buildRuby(tokens);
-  wireTokenClicks();
 
   // 번역
-  let tr = "";
+  let ko = "(번역 실패)";
   try {
     const r = await translateJaKo(t);
-    tr = r?.text || r?.result || r?.translation || "";
-  } catch (e) {
-    tr = "(번역 실패)";
-  }
-  S.popupEl.querySelector(".mp-trans").textContent = tr;
+    ko = r?.text || r?.result || r?.translation || ko;
+  } catch {}
+  S.popupEl.querySelector(".mp-trans").textContent = ko;
 }
 
-// 문장상자 탭 처리: 팝업이 열려있으면 연결, 아니면 새로 열기
-async function onBoxTap(anno, rect) {
+/* -------------------- 연결 모드: 박스 탭 처리 -------------------- */
+async function onBoxTap(anno, rect){
   const text = (anno.text || "").trim();
-  if (!text) return;
+  if(!text) return;
 
-  if (!S.popupEl) {
-    // 새 세션
-    S.agg = { ids: [rect], text };
-    openPopup(rect);
+  if (!S.popupEl){
+    // 새 세션 시작
+    S.aggText = text;
+    ensurePopup(rect);
   } else {
-    // 연결 모드: 누적
-    S.agg.ids.push(rect);
-    S.agg.text += text; // 일본어는 공백 없이 자연 연결
+    // 팝업 열려있으면 연결
+    S.aggText += text; // 일본어 특성상 공백 없이 접합
   }
   await refreshPopupContents();
 }
 
-// 이미지/페이지 초기화
-async function bootstrap() {
-  // 뷰포트 기준 크기
-  S.viewW = document.documentElement.clientWidth;
-  S.viewH = document.documentElement.clientHeight;
+/* -------------------- 부트스트랩 -------------------- */
+async function bootstrap(){
+  S.vw = document.documentElement.clientWidth;
+  S.vh = document.documentElement.clientHeight;
 
-  // URL의 id 파라미터로 이미지 로드
-  const params = new URLSearchParams(location.search);
-  const id = params.get("id");
-  if (!id) {
+  const id = new URLSearchParams(location.search).get("id");
+  if(!id){
     document.body.innerHTML = `<div class="hint">id가 없습니다.</div>`;
     return;
   }
 
-  // 이미지 태그
+  // ✅ 이미지 로딩: 예전 방식 그대로 유지 (구조 변경 없음)
   const img = new Image();
   img.id = "screenshot";
   img.alt = "screenshot";
-  img.onload = async () => {
+  img.onload = async ()=>{
     S.imgEl = img;
-    // OCR
-    try {
-      S.annos = await gcvOCR(id);
-    } catch (e) {
-      S.annos = [];
-    }
+    // OCR 호출 → 박스 렌더 (예전 흐름 그대로)
+    try { S.annos = await gcvOCR(id); } catch { S.annos = []; }
     drawBoxes(S.annos);
   };
-  img.src = await getImageById(id);
+  img.onerror = ()=>{ /* 필요시 간단 경고만 */
+    alert("이미지를 불러오지 못했습니다.");
+  };
+  img.src = await getImageById(id);   // ← 기존 그대로
   document.body.appendChild(img);
 
-  // 배경 클릭해도 닫지 않음(요청사항) — 아무 동작 X
+  // 배경 탭으로 닫기 없음(요청사항) → 아무 이벤트도 안 둠
 }
 bootstrap();
