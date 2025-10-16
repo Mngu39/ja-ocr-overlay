@@ -1,168 +1,47 @@
-/* =========================================================
-   JA OCR Overlay — full stylesheet
-   ========================================================= */
-
-/* Base */
 :root{
-  --bg: #000;
-  --panel: rgba(24,24,24,.96);
-  --panel-2: #1d1d1d;
-  --text: #f5f5f5;
-  --muted: #b9b9b9;
-  --line: #2a2a2a;
-  --accent: #50c8ff;
-  --shadow: 0 10px 30px rgba(0,0,0,.35);
+  --bg:#0b0b0c; --ink:#e8e8ea; --muted:#a9abb3; --accent:#4da3ff;
+  --box:#4da3ff; --box-active:#00d4ff; --pop:#141417; --border:#2a2a31;
 }
+*{ box-sizing:border-box; }
+html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink); font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Apple SD Gothic Neo", "Noto Sans CJK KR", "Noto Sans JP", "Malgun Gothic", sans-serif; }
+#stage{ position:relative; width:100%; min-height:100vh; display:grid; place-items:center; padding:10px; }
 
-*{ box-sizing: border-box; }
-html,body{
-  margin:0; padding:0; height:100%;
-  background: var(--bg); color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Apple SD Gothic Neo",
-               "Noto Sans KR", "Hiragino Sans", "Noto Sans JP", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-  overscroll-behavior: none;
-  touch-action: manipulation;
-}
+#img{ max-width:100%; height:auto; display:block; border-radius:10px; box-shadow:0 6px 30px rgba(0,0,0,.4); }
+#overlay{ position:absolute; inset:0; margin:auto; pointer-events:auto; }
+#hint{ position:absolute; left:0; right:0; bottom:18px; text-align:center; color:var(--muted); font-size:14px; }
 
-/* Screenshot pinned at (0,0). The page is sized to the screenshot by JS. */
-#screenshot{
-  position: absolute;
-  left: 0; top: 0;
-  z-index: 1000;
-  max-width: none; /* keep original pixels */
-  height: auto;
-  image-rendering: -webkit-optimize-contrast;
-}
+.box{ position:absolute; border:2px solid var(--box); border-radius:10px; background:transparent; cursor:pointer; }
+.box.active{ border-color:var(--box-active); box-shadow:0 0 0 2px rgba(0,212,255,.25) inset; }
 
-/* Quick hint (when id missing) */
-.hint{
-  position: fixed; inset: 0;
-  display: grid; place-items: center;
-  color: var(--muted);
-  font-size: 16px;
-}
+.popover{ position:absolute; max-width:min(92vw, 900px); background:var(--pop); color:var(--ink);
+  border:1px solid var(--border); border-radius:14px; padding:12px; box-shadow:0 12px 40px rgba(0,0,0,.5); z-index:50; }
+.pop-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 0 6px; }
+.sep{ border:none; border-top:1px solid var(--border); margin:8px 0; }
 
-/* ===================== Boxes Layer ====================== */
-.boxes-layer{
-  position: absolute;
-  left:0; top:0; right:0; bottom:0;
-  z-index: 3000;
-  pointer-events: auto;
-}
-.box{
-  position:absolute;
-  border: 2px solid rgba(80,200,255,.60);
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-  transition: background-color .12s ease, border-color .12s ease;
-}
-.box:hover{
-  background: rgba(80,200,255,.08);
-  border-color: rgba(80,200,255,.85);
-}
+.ruby-line{ line-height:1.6; font-size:16px; color:#cfd4ff; word-break:break-word; }
+.ruby-line ruby{ ruby-position:over; ruby-align:center; }
+.ruby-line rt{ font-size:12px; color:#9fb3ff; }
 
-/* ===================== Main Popup ======================= */
-.main-popup{
-  position: absolute;
-  max-width: min(820px, 92vw);
-  background: var(--panel);
-  color: var(--text);
-  border-radius: 12px;
-  padding: 12px 14px 14px;
-  box-shadow: var(--shadow);
-  z-index: 5000;
-  backdrop-filter: blur(6px);
-}
+/* ✅ 추가: 루비 라인 토큰도 클릭 가능/하이라이트 */
+.ruby-line .tok{ padding:2px 4px; border-radius:6px; }
+.ruby-line .tok:hover{ background:#1f2433; cursor:pointer; }
 
-.mp-head{
-  display:flex; align-items:center; justify-content:space-between;
-  gap:10px; margin-bottom:8px;
-}
-.mp-title{ font-weight: 700; font-size: 14px; letter-spacing: .2px; }
-.mp-actions .btn{ margin-left:6px; }
+.orig-line{ line-height:1.8; font-size:18px; word-break:break-word; }
+.orig-line .tok{ padding:2px 4px; border-radius:6px; }
+.orig-line .tok:hover{ background:#1f2433; cursor:pointer; }
 
-/* Buttons */
-.btn{
-  border: 0; outline: 0; cursor: pointer; user-select: none;
-  background: #2e2e2e; color:#fff;
-  padding: 8px 12px; border-radius: 10px;
-}
-.btn.sm{ padding: 6px 10px; font-size: 12px; border-radius: 8px; }
-.btn.danger{ background:#444; }
+.trans-line{ font-size:18px; line-height:1.7; color:#e7f6ff; word-break:break-word; }
 
-/* Original (with ruby) */
-.mp-orig{
-  line-height: 1.9;
-  font-size: clamp(16px, 1.9vw, 19px);
-  letter-spacing: .2px;
-  word-break: break-all;
-}
-.mp-orig ruby rt{
-  font-size: 11px;
-  line-height: 1;
-  opacity: .95;
-}
+.btn{ background:var(--accent); color:#021323; border:none; padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer; }
+.btn.ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); }
+.btn.sm{ padding:6px 10px; font-size:12px; }
 
-/* Each token wrapper — clickable for sub-popup */
-.tok{
-  display: inline-block;
-  padding: 0 .5px; margin: 0 0;
-  border-radius: 4px;
-}
-.tok:hover{ background: rgba(255,255,255,.06); }
+.subpop{ position:absolute; max-width:70vw; background:var(--pop); color:var(--ink);
+  border:1px solid var(--border); border-radius:12px; padding:8px 10px; z-index:60; box-shadow:0 8px 30px rgba(0,0,0,.5); }
+.subpop a{ color:#9bd1ff; text-decoration:none; }
+.subpop a:hover{ text-decoration:underline; }
 
-/* Translation */
-.mp-sec{ margin-top: 10px; }
-.mp-st{ font-size: 12px; opacity: .75; margin-bottom: 4px; }
-.mp-trans{ font-size: clamp(15px, 1.8vw, 18px); line-height: 1.6; }
-
-/* ===================== Sub Popup ======================== */
-.sub-popup{
-  position: absolute;
-  z-index: 5200;
-  max-width: min(560px, 86vw);
-  background: var(--panel-2);
-  color: var(--text);
-  border-radius: 10px;
-  padding: 10px 12px;
-  box-shadow: var(--shadow);
-}
-.sub-wrap{}
-.sub-h{ font-weight: 700; margin-bottom: 6px; }
-.sub-row{ margin: 3px 0; font-size: 14px; line-height: 1.5; }
-.sub-actions{ margin-top: 6px; }
-.sub-actions .ext{
-  font-size:12px; color:#9cc3ff; text-decoration: underline;
-}
-
-/* ===================== Edit Dialog ====================== */
-.edit-dlg{
-  background:#111;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
-  margin-bottom: 8px;
-}
-.edit-dlg textarea{
-  width: 100%;
-  background: #0e0e0e;
-  color: #fff;
-  border: 1px solid #333;
-  border-radius: 6px;
-  padding: 8px;
-  resize: vertical;
-  font-size: 14px;
-  line-height: 1.5;
-}
-.edit-actions{
-  display:flex; gap:8px; margin-top:6px;
-}
-
-/* ===================== Misc ============================= */
-::selection{ background: rgba(80,200,255,.35); }
-
-/* Prevent accidental image selection when tapping boxes */
-img, .boxes-layer, .box, .main-popup, .sub-popup { -webkit-user-select: none; user-select: none; }
+dialog{ border:none; border-radius:12px; background:var(--pop); color:var(--ink); }
+.edit-form{ display:flex; flex-direction:column; gap:8px; min-width:min(86vw, 560px); }
+textarea{ width:100%; background:#11121a; color:var(--ink); border:1px solid var(--border); border-radius:10px; padding:8px; font-size:16px; }
+menu{ display:flex; justify-content:flex-end; gap:8px; margin:0; padding:0; }
