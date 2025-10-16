@@ -1,427 +1,362 @@
-// JA OCR Overlay — app.js (pop toolbar + arrow move + local kanji DB + improved subpopup)
-// - 절대 경로/도메인 의존 없음: 리포 내부 JSON을 그대로 fetch
-// - 여러 문장상자 선택(토글) + 순번 배지 + 하이라이트
-// - 메인 팝업: 우측 도킹 툴바(닫기/수정), 가장자리 얇은 방향 화살표로 상하좌우 재배치
-// - 서브팝업: 메인팝업 하단에 항상 도킹, 1줄(형태소·후리가나 – (lemma) – 번역), 2줄(한자 박스들)
-// - 한자 DB: /kanji_ko_attr_irreg.min.json, /일본어_한자_암기박사/deck.json
-
-import {
-  getImageById, gcvOCR,
-  getFurigana, translateJaKo,
-  openNaverJaLemma, openNaverHanja
-} from "./api.js";
-import { placeMainPopover } from "./place.js"; // (상/하 기준 배치 사용)
+// /src/app.js  — compact & stable (≈250 lines)
+import { getImageById, gcvOCR, getFurigana, translateJaKo, openNaverJaLemma, openNaverHanja } from "./api.js";
+import { placeMainPopover, placeSubDetached } from "./place.js";
 
 const stage   = document.getElementById("stage");
 const imgEl   = document.getElementById("img");
 const overlay = document.getElementById("overlay");
 const hint    = document.getElementById("hint");
-const pop     = document.getElementById("pop");
-const sub     = document.getElementById("sub");
-const btnEdit = document.getElementById("btnEdit");
-const rubyLine= document.getElementById("rubyLine");
-const transLine=document.getElementById("transLine");
-const editDlg = document.getElementById("editDlg");
-const editInput=document.getElementById("editInput");
 
-// ───────────── Local Kanji DB (리포 내 파일을 그대로 사용) ─────────────
-const KANJI_DB_URL = "./kanji_ko_attr_irreg.min.json";
-const ANKI_DECK_URL = "./일본어_한자_암기박사/deck.json";
+const pop       = document.getElementById("pop");
+const rubyLine  = document.getElementById("rubyLine");
+const origLine  = document.getElementById("origLine"); // 쓰지 않음(중복 제거)
+const transLine = document.getElementById("transLine");
+const editDlg   = document.getElementById("editDlg");
+const editInput = document.getElementById("editInput");
+const btnEdit   = document.getElementById("btnEdit");
 
-let KANJI_MAP = null;       // 일반 DB: { '漢': {ko:'…', on:'…', kun:'…', …}, … }
-let ANKI_MAP  = null;       // 안키 DB: { '漢': {gloss:'…', explain:'…'} }
+const sub = document.getElementById("sub");
+
+let annos = [];                // { text, polygon:[[x,y]..] }
+let currentAnchor = null;      // 앵커 박스(또는 합성 앵커)
+let currentSentence = "";
+let currentTokenEl = null;
+
+// ===== Kanji DBs (지연로드: 이미지 로더를 절대 막지 않음) =====
+let KANJI = null;      // 일반 DB: /kanji_ko_attr_irreg.min.json
+let ANKI  = null;      // 사용자 덱: /일본어_한자_암기박사/deck.json
 async function loadKanjiDBs(){
   try{
-    // 일반 DB
-    const r1 = await fetch(KANJI_DB_URL, { cache:"no-store" });
-    if (r1.ok){
-      const j = await r1.json();
-      // 다양한 스키마 대비: {char: {...}} 또는 [{char:'漢', ...}] 모두 지원
-      KANJI_MAP = new Map();
-      if (Array.isArray(j)){
-        for (const it of j){
-          const ch = it.char || it.kanji || it.k || it.c;
-          if (ch && ch.length===1) KANJI_MAP.set(ch, it);
+    const [j1, j2] = await Promise.allSettled([
+      fetch("./kanji_ko_attr_irreg.min.json").then(r=>r.ok?r.json():null),
+      fetch("./일본어_한자_암기박사/deck.json").then(r=>r.ok?r.json():null)
+    ]);
+    KANJI = j1.status==="fulfilled" ? j1.value : null;
+    // 덱 인덱싱(문자→설명) — 다양한 필드명에 대응
+    if (j2.status==="fulfilled" && j2.value){
+      const m = new Map();
+      const arr = Array.isArray(j2.value) ? j2.value
+                  : Array.isArray(j2.value.notes) ? j2.value.notes
+                  : Object.values(j2.value);
+      for (const row of (arr||[])){
+        const textBlob = JSON.stringify(row);
+        const m1 = textBlob && textBlob.match(/[\u4E00-\u9FFF]/g);
+        if (!m1) continue;
+        const explain = (row.explain || row.desc || row.meaning || row.back || row.definition || "").toString();
+        for (const ch of new Set(m1)) {
+          if (!m.has(ch)) m.set(ch, explain || "");
         }
-      } else {
-        for (const k of Object.keys(j)){ if(k.length===1) KANJI_MAP.set(k, j[k]); }
       }
+      ANKI = m; // Map<char, explain>
     }
-  }catch{}
-
-  try{
-    // 안키 DB(덱 json): 구조가 제각각일 수 있어 느슨한 인덱싱
-    const r2 = await fetch(ANKI_DECK_URL, { cache:"no-store" });
-    if (r2.ok){
-      const j = await r2.json();
-      ANKI_MAP = new Map();
-      const pool = [];
-      // 형태 1) {notes:[{fields:{…}}]}
-      if (Array.isArray(j?.notes)){
-        for (const n of j.notes){
-          const f = n.fields || n.data || n;
-          pool.push(f);
-        }
-      }
-      // 형태 2) {cards:[{…}], items:[…]} 등 기타 루트에 배열 하나만 있는 경우
-      for (const k of Object.keys(j)){
-        if (Array.isArray(j[k]) && !k.startsWith("_")){
-          for (const v of j[k]){
-            if (v && typeof v === "object" && (v.fields || v.data)) pool.push(v.fields || v.data);
-          }
-        }
-      }
-      // 느슨한 추출: 한 글자 표제어 + 한국어 의미/설명 후보
-      const pick = (obj, keys) => keys.map(k=>obj[k]).find(Boolean);
-      for (const f of pool){
-        const entries = Object.entries(f).map(([k,v])=>[String(k), String(v??"")]);
-        const allText = entries.map(([,v])=>v).join(" ");
-        // 한 글자 한자 후보
-        const kanji = (allText.match(/[\u4E00-\u9FFF]/g)||[]).filter(ch=>ch.length===1);
-        if (!kanji.length) continue;
-        // 설명/뜻 후보 필드
-        const gloss = pick(f, ["뜻","의미","훈음","음훈","keyword","ko","mean","meaning"]) || "";
-        const explain = pick(f, ["설명","설명문","설명1","explain","memo","description"]) || "";
-        for (const ch of kanji){
-          if (!ANKI_MAP.has(ch)){
-            ANKI_MAP.set(ch, { gloss: gloss || "", explain: explain || "" });
-          }
-        }
-      }
-    }
-  }catch{}
+  }catch{ /* ignore */ }
 }
-const hasKanji = s => /[\u4E00-\u9FFF\u3400-\u4DBF]/.test(s||"");
-const kataToHira = s => (s||"").replace(/[\u30a1-\u30fa]/g,ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
-const esc = s => (s||"").replace(/[&<>"']/g,m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+// 백그라운드 시작
+const DB_READY = loadKanjiDBs().catch(()=>null);
 
-// ───────────── 전역 상태 ─────────────
-let annos = [];                          // OCR 결과
-let selected = [];                       // 선택된 상자 DOM (순서 중요)
-let currentAnchor = null;               // 앵커 상자
-let currentSentence = "";               // 결합 텍스트
-let currentTokenEl = null;              // 서브 토큰 엘리먼트
-let placeMode = "auto";                 // 팝업 배치 모드: "top"|"bottom"|"left"|"right"|"auto"
+// ===== 유틸 =====
+const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+const kataToHira = s => (s||"").replace(/[\u30a1-\u30f6]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
+const hasKanji   = s => /[\u3400-\u9FFF]/.test(s||"");
 
-// ───────────── 부트스트랩 ─────────────
+// 월 1,000건 로컬 카운트(간단)
+function quotaKey(){ const d=new Date(); return `gcv_quota_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}`; }
+function tryConsumeQuota(){ const k=quotaKey(); const n=+(localStorage.getItem(k)||0); if(n>=1000) return{ok:false,key:k,n}; localStorage.setItem(k, n+1); return{ok:true,key:k,n:n+1}; }
+function rollbackQuota(k){ const n=+(localStorage.getItem(k)||1); localStorage.setItem(k, Math.max(0,n-1)); }
+
+// ===== 이미지 → OCR =====
 (async function bootstrap(){
-  await loadKanjiDBs();
-
   try{
     const qs = new URLSearchParams(location.search);
     const id = qs.get("id");
-    if (!id) throw new Error("?id= 필요");
+    if(!id) throw new Error("?id= 필요");
 
     imgEl.onload = async ()=>{
+      const q=tryConsumeQuota(); if(!q.ok){ hint.textContent="월간 무료 사용량 초과"; return; }
       try{
-        hint.textContent = "OCR(Google) 중…";
+        hint.textContent="OCR(Google) 중…";
         annos = await gcvOCR(id);
         if (!annos.length){ hint.textContent="문장을 찾지 못했습니다."; return; }
-        hint.textContent = "문장상자를 탭하세요";
+        hint.textContent="문장상자를 탭하세요";
         renderOverlay();
-      }catch(e){ console.error(e); hint.textContent="OCR 오류"; }
+      }catch(e){ rollbackQuota(q.key); console.error(e); hint.textContent="OCR 오류"; }
     };
-    imgEl.src = await getImageById(id);
-  }catch(e){ hint.textContent = e.message; }
+    imgEl.onerror = ()=>{ hint.textContent="이미지를 불러오지 못했습니다"; };
+    imgEl.src = (await getImageById(id)) + `&t=${Date.now()}`; // 캐시 버스터(사파리 안전)
+  }catch(e){ hint.textContent=e.message; }
 })();
 
-// ───────────── 오버레이 렌더링 ─────────────
+// ===== 오버레이 박스 =====
+const sel = []; // 선택 순서 배열(요청대로 토글·순서 유지)
 function renderOverlay(){
-  const rect = imgEl.getBoundingClientRect();
-  overlay.style.width = rect.width+"px";
-  overlay.style.height= rect.height+"px";
-
+  const rect=imgEl.getBoundingClientRect();
+  overlay.style.width=rect.width+"px"; overlay.style.height=rect.height+"px";
   const sx=rect.width/imgEl.naturalWidth, sy=rect.height/imgEl.naturalHeight;
-  overlay.innerHTML="";
 
-  annos.forEach((a, idx)=>{
+  overlay.innerHTML="";
+  for(const a of annos){
     const [p0,p1,p2,p3]=a.polygon;
     const l=Math.min(p0[0],p3[0])*sx, t=Math.min(p0[1],p1[1])*sy;
     const r=Math.max(p1[0],p2[0])*sx, b=Math.max(p2[1],p3[1])*sy;
     const box=document.createElement("div");
     box.className="box";
-    Object.assign(box.style,{left:l+"px",top:t+"px",width:(r-l)+"px",height:(b-t)+"px"});
+    Object.assign(box.style,{ left:l+"px", top:t+"px", width:(r-l)+"px", height:(b-t)+"px" });
     box.dataset.text=a.text||"";
-    box.addEventListener("click",(ev)=>{ ev.stopPropagation(); onToggleBox(box); });
+    box.addEventListener("click",(ev)=>{ ev.stopPropagation(); toggleSelect(box); });
     overlay.appendChild(box);
-    // 선택 상태 유지 시 시각화
-    const pos = selected.indexOf(box);
-    if (pos>=0) decorateSelected(box, pos);
+  }
+  paintSelection();
+}
+function toggleSelect(box){
+  const i = sel.indexOf(box);
+  if (i>=0) sel.splice(i,1); else sel.push(box);
+  if (!sel.length) { pop.hidden=true; sub.hidden=true; }
+  paintSelection();
+  if (sel.length) openMainFromSelection();
+}
+function paintSelection(){
+  overlay.querySelectorAll(".box").forEach(b=>{
+    b.classList.remove("active"); b.style.background="transparent";
+    b.querySelector(".tag")?.remove();
+  });
+  sel.forEach((b,idx)=>{
+    b.classList.add("active");
+    b.style.background="rgba(80,200,255,.10)";
+    const t=document.createElement("div");
+    t.className="tag";
+    t.textContent=String(idx+1);
+    Object.assign(t.style,{
+      position:"absolute", right:"4px", top:"2px",
+      background:"#50c8ff", color:"#002331", fontWeight:"700",
+      padding:"0 6px", borderRadius:"10px", fontSize:"12px"
+    });
+    b.appendChild(t);
   });
 }
+function unionRect(boxes){
+  const rs=boxes.map(b=>b.getBoundingClientRect());
+  const l=Math.min(...rs.map(r=>r.left)), t=Math.min(...rs.map(r=>r.top));
+  const r=Math.max(...rs.map(r=>r.right)), b=Math.max(...rs.map(r=>r.bottom));
+  return { left:l, top:t, width:r-l, height:b-t, right:r, bottom:b };
+}
+function selectedText(){ return sel.map(b=>b.dataset.text||"").join(""); }
 
-// 선택 토글 + 순번/하이라이트 + 팝업 갱신
-function onToggleBox(box){
-  const i = selected.indexOf(box);
-  if (i>=0){
-    selected.splice(i,1);
-    undecorate(box);
-  }else{
-    selected.push(box);
-    decorateSelected(box, selected.length-1);
-  }
-  if (selected.length===0){
-    closeAll();
-    return;
-  }
-  currentAnchor = selected[0];
-  currentSentence = selected.map(b=>b.dataset.text||"").join("");
-  openMainPopover(currentAnchor, currentSentence);
-}
-function decorateSelected(box, order){
-  box.classList.add("selected");
-  box.dataset.order = (order+1);
-}
-function undecorate(box){
-  box.classList.remove("selected");
-  delete box.dataset.order;
-  // 재번호
-  selected.forEach((b,idx)=> b.dataset.order=(idx+1));
+// ===== 팝업(메인) =====
+function openMainFromSelection(){
+  const anchorRect = unionRect(sel);
+  // 가짜 앵커(div)로 배치(기존 placeMainPopover 재사용)
+  const fake = document.createElement("div");
+  Object.assign(fake.style,{ position:"absolute", left:anchorRect.left+window.scrollX+"px",
+    top:anchorRect.top+window.scrollY+"px", width:anchorRect.width+"px", height:anchorRect.height+"px" });
+  document.body.appendChild(fake);
+  currentAnchor=fake; currentSentence=selectedText();
+  openMainPopover(currentAnchor, currentSentence).finally(()=> fake.remove());
 }
 
-// 외부 클릭: 서브팝업만 닫기 (메인팝업은 버튼으로 닫음)
-stage.addEventListener("click",(e)=>{
-  if (!sub.hidden && !sub.contains(e.target)) sub.hidden = true;
-});
+async function openMainPopover(anchor, text){
+  pop.hidden=false; sub.hidden=true;
+  // 폭: 앵커 대비 넉넉히, 화면폭 92% 제한
+  const aw = anchor.getBoundingClientRect().width, overlayW = overlay.clientWidth;
+  pop.style.width = Math.min(Math.max(Math.round(aw*1.1), 420), Math.round(overlayW*0.92))+"px";
+  placeMainPopover(anchor, pop, 8);
 
-// 리사이즈 대응
-function relayout(){
-  renderOverlay();
-  if (currentAnchor && !pop.hidden) repositionMain();
-  if (!sub.hidden) dockSub();
-}
-window.addEventListener("resize", relayout, {passive:true});
-globalThis.visualViewport?.addEventListener("resize", relayout, {passive:true});
-window.addEventListener("scroll", relayout, {passive:true});
+  // 사이드 툴바(닫기/수정) — 항상 pop 오른쪽에 부착
+  ensureSideDock();
 
-// ───────────── 메인 팝업 ─────────────
-function openMainPopover(anchor, text){
-  // 내용 초기화
-  pop.hidden=false;
-  rubyLine.innerHTML="";
-  transLine.textContent="…";
+  // 중복 원문 제거: origLine 비활성화
+  origLine.innerHTML=""; origLine.style.display="none";
+  rubyLine.innerHTML="…"; transLine.textContent="…";
 
-  // 폭: 앵커 폭 기준으로 살짝 넓게, 화면의 92% 제한
-  const aw=anchor.getBoundingClientRect().width;
-  const overlayW=overlay.clientWidth;
-  pop.style.width=Math.min(Math.max(Math.round(aw*1.1), 440), Math.round(overlayW*0.92))+"px";
+  // Furigana + 번역 동시 요청
+  try{
+    const [rubi, tr] = await Promise.all([ getFurigana(text), translateJaKo(text) ]);
+    // rubi.tokens 기반으로 ruby HTML 구성(토큰마다 클릭 가능)
+    const tokens = (rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes || [])
+      .map(t=>{
+        const surf = t.surface || t.text || "";
+        const read = kataToHira(t.reading || t.read || "");
+        const lemma= t.lemma  || t.base   || surf;
+        return { surf, read, lemma };
+      }).filter(t=>t.surf);
 
-  // 툴바/화살표 한번만 생성
-  ensureToolbar();
-  ensureArrows();
+    rubyLine.innerHTML = tokens.map(t=>{
+      if (hasKanji(t.surf) && t.read){
+        return `<span class="tok" data-surf="${escapeHtml(t.surf)}" data-lemma="${escapeHtml(t.lemma)}" data-read="${escapeHtml(t.read)}"><ruby>${escapeHtml(t.surf)}<rt>${escapeHtml(t.read)}</rt></ruby></span>`;
+      }
+      return `<span class="tok" data-surf="${escapeHtml(t.surf)}" data-lemma="${escapeHtml(t.lemma||t.surf)}" data-read="">${escapeHtml(t.surf)}</span>`;
+    }).join("");
 
-  // 배치
-  repositionMain();
-
-  // 문장 토큰을 "루비 포함 클릭 가능" 형태로 단 한 줄에 렌더
-  // 먼저 형태소 분석/후리가나 + 번역 병렬로
-  (async()=>{
-    try{
-      const [rubi, tr] = await Promise.all([ getFurigana(text), translateJaKo(text) ]);
-      const tokens = rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes || [];
-
-      rubyLine.innerHTML = tokens.map((t,i)=>{
-        const surf = t.surface ?? t.text ?? "";
-        const read = kataToHira(t.reading ?? t.read ?? "");
-        const lemma= t.lemma ?? t.base ?? t.dict ?? t.normalized ?? "";
-        // 각 토큰을 클릭 가능으로 감싸기
-        const clickable = hasKanji(surf) || lemma || true;
-        const spanOpen = `<span class="tok" data-i="${i}" data-s="${esc(surf)}" data-r="${esc(read)}" data-l="${esc(lemma)}">`;
-        const spanClose= `</span>`;
-        const ruby = read
-          ? `<ruby>${esc(surf)}<rt>${esc(read)}</rt></ruby>`
-          : esc(surf);
-        return clickable ? `${spanOpen}${ruby}${spanClose}` : ruby;
-      }).join("");
-
-      // 토큰 클릭 핸들러
-      rubyLine.querySelectorAll(".tok").forEach(el=>{
-        el.addEventListener("click",(ev)=>{
-          ev.stopPropagation();
-          const s = el.dataset.s||"", r = el.dataset.r||"", l = el.dataset.l||"";
-          openSubForToken(el, s, r, l);
+    // 토큰 클릭 → 서브팝업
+    rubyLine.querySelectorAll(".tok").forEach(span=>{
+      span.addEventListener("click",(ev)=>{
+        ev.stopPropagation();
+        openSubForToken(span, {
+          surf: span.dataset.surf || "",
+          lemma: span.dataset.lemma || span.dataset.surf || "",
+          read: span.dataset.read || ""
         });
       });
+    });
 
-      const translated = tr?.text || tr?.result || tr?.translation || "";
-      transLine.textContent = translated || "(번역 없음)";
-      repositionMain();
-      // 도킹 서브팝업은 토큰 선택 시에만 열린다.
-    }catch(e){
-      transLine.textContent="(번역 실패)";
-      console.error(e);
-    }
-  })();
-}
-
-function repositionMain(){
-  // place.js 의 상/하 우선 배치 + 모드 힌트
-  if (placeMode==="top" || placeMode==="bottom") {
-    placeMainPopover(currentAnchor, pop, 8); // 상/하 자동
-  } else {
-    // 좌/우 모드는 간단히 수동 배치
-    const vb = (globalThis.visualViewport || { width:innerWidth, height:innerHeight, offsetTop:scrollY, offsetLeft:scrollX });
-    const ar = currentAnchor.getBoundingClientRect();
-    const pr = pop.getBoundingClientRect();
-    let x = (placeMode==="left") ? (ar.left - pr.width - 8) : (ar.right + 8);
-    let y = ar.top + (ar.height - pr.height)/2;
-    x = Math.max(vb.offsetLeft+8, Math.min(x, vb.offsetLeft+vb.width - pr.width - 8));
-    y = Math.max(vb.offsetTop+8, Math.min(y, vb.offsetTop+vb.height - pr.height - 8));
-    Object.assign(pop.style, { left:`${x + scrollX}px`, top:`${y + scrollY}px` });
+    const out = tr?.text || tr?.result || tr?.translation || "";
+    transLine.textContent = out || "(번역 없음)";
+    requestAnimationFrame(()=> placeMainPopover(anchor, pop, 8));
+  }catch(e){
+    console.error(e);
+    transLine.textContent="(번역 실패)";
   }
-  // 툴바/화살표/서브 도킹 위치 갱신
-  positionToolbar();
-  positionArrows();
-  if (!sub.hidden) dockSub();
 }
 
-// 툴바(우측 도킹) 생성/위치
-let toolbar=null;
-function ensureToolbar(){
-  if (toolbar) return;
-  toolbar = document.createElement("div");
-  toolbar.className = "pop-toolbar";
-  toolbar.innerHTML = `
-    <button class="icon btn-close" title="닫기">✕</button>
-    <button id="btnEditGhost" class="icon" title="수정">✎</button>
-  `;
-  stage.appendChild(toolbar);
-  toolbar.querySelector(".btn-close").onclick = closeAll;
-  // 기존 버튼과 동일 동작
-  document.getElementById("btnEdit").onclick = openEdit;
-  toolbar.querySelector("#btnEditGhost").onclick = openEdit;
-}
-function positionToolbar(){
-  if (!toolbar || pop.hidden) return;
-  const pr = pop.getBoundingClientRect();
-  Object.assign(toolbar.style, {
-    left: `${pr.right + 8 + scrollX}px`,
-    top:  `${pr.top   + scrollY}px`,
+// 사이드 도킹(닫기/수정)
+function ensureSideDock(){
+  if (pop.querySelector(".dock")) return;
+  const dock = document.createElement("div");
+  dock.className="dock";
+  Object.assign(dock.style,{
+    position:"absolute", right:"-44px", top:"8px", width:"36px",
+    display:"flex", flexDirection:"column", gap:"10px", zIndex:"2"
+  });
+  const mk = (label, handler)=> {
+    const b=document.createElement("button");
+    b.textContent=label; b.className="btn sm";
+    Object.assign(b.style,{ width:"36px", height:"36px", borderRadius:"18px", padding:"0" });
+    b.addEventListener("click",(e)=>{ e.stopPropagation(); handler(); });
+    return b;
+  };
+  // 닫기
+  dock.appendChild(mk("✕", ()=>{ pop.hidden=true; sub.hidden=true; sel.length=0; paintSelection(); }));
+  // 수정
+  dock.appendChild(mk("✎", ()=>{
+    editInput.value=currentSentence||""; editDlg.showModal();
+  }));
+  pop.appendChild(dock);
+
+  // 방향 화살표 (얇게)
+  const arrows = document.createElement("div");
+  Object.assign(arrows.style,{ position:"absolute", inset:"2px", pointerEvents:"none" });
+  pop.appendChild(arrows);
+  [["↑","top"],["↓","bottom"],["←","left"],["→","right"]].forEach(([ch,dir])=>{
+    const a=document.createElement("div");
+    a.textContent=ch;
+    Object.assign(a.style,{
+      position:"absolute", pointerEvents:"auto", opacity:.55, fontSize:"12px",
+      background:"#2b2f3a", padding:"2px 6px", borderRadius:"10px", userSelect:"none", cursor:"pointer"
+    });
+    if(dir==="top")    Object.assign(a.style,{ left:"50%", transform:"translateX(-50%)", top:"-20px" });
+    if(dir==="bottom") Object.assign(a.style,{ left:"50%", transform:"translateX(-50%)", bottom:"-20px" });
+    if(dir==="left")   Object.assign(a.style,{ top:"50%",  transform:"translateY(-50%)", left:"-24px" });
+    if(dir==="right")  Object.assign(a.style,{ top:"50%",  transform:"translateY(-50%)", right:"-24px" });
+    a.addEventListener("click",(e)=>{ e.stopPropagation(); nudgeTo(dir); });
+    arrows.appendChild(a);
   });
 }
-function openEdit(e){
-  e?.stopPropagation();
-  editInput.value = currentSentence || "";
-  editDlg.showModal();
+function nudgeTo(dir){
+  // 앵커 주변으로 재배치(간단한 우선 배치)
+  if(!currentAnchor) return;
+  placeMainPopover(currentAnchor, pop, 8); // 기본 위치부터
+  const r=pop.getBoundingClientRect();
+  const dx = dir==="left" ? -Math.min(24, r.left-8) : dir==="right"?  Math.min(24, innerWidth-8-r.right) : 0;
+  const dy = dir==="top"  ? -Math.min(24, r.top-8)   : dir==="bottom"? Math.min(24, innerHeight-8-r.bottom) : 0;
+  pop.style.left = (r.left + dx + window.scrollX) + "px";
+  pop.style.top  = (r.top  + dy + window.scrollY)  + "px";
 }
+
+// 수정 다이얼로그 → 재계산
 document.getElementById("editOk").addEventListener("click", ()=>{
-  const t=editInput.value.trim();
-  if (t){ currentSentence=t; openMainPopover(currentAnchor, currentSentence); }
-  editDlg.close();
+  const t=editInput.value.trim(); if(!t){ editDlg.close(); return; }
+  currentSentence=t; editDlg.close(); openMainPopover(currentAnchor, currentSentence);
 });
+btnEdit.addEventListener("click",(e)=>{ e.stopPropagation(); editInput.value=currentSentence||""; editDlg.showModal(); });
 
-// 방향 화살표(얇은 버튼) 생성/위치/동작
-let arrowTop=null, arrowBottom=null, arrowLeft=null, arrowRight=null;
-function ensureArrows(){
-  if (arrowTop) return;
-  arrowTop    = mkArrow("top","▲");
-  arrowBottom = mkArrow("bottom","▼");
-  arrowLeft   = mkArrow("left","◀");
-  arrowRight  = mkArrow("right","▶");
-  [arrowTop,arrowBottom,arrowLeft,arrowRight].forEach(a=>stage.appendChild(a));
-}
-function mkArrow(pos, label){
-  const el = document.createElement("button");
-  el.className = `pop-nudge ${pos}`;
-  el.textContent = label;
-  el.onclick = (e)=>{ e.stopPropagation(); placeMode = pos==="top"||pos==="bottom" ? pos : pos; repositionMain(); };
-  return el;
-}
-function positionArrows(){
-  const pr = pop.getBoundingClientRect();
-  const base = { x: pr.left + scrollX, y: pr.top + scrollY, w: pr.width, h: pr.height };
-  if (arrowTop)    Object.assign(arrowTop.style,    { left:`${base.x + base.w/2 - 10}px`, top:`${base.y - 22}px` });
-  if (arrowBottom) Object.assign(arrowBottom.style, { left:`${base.x + base.w/2 - 10}px`, top:`${base.y + base.h + 6}px` });
-  if (arrowLeft)   Object.assign(arrowLeft.style,   { left:`${base.x - 22}px`,             top:`${base.y + base.h/2 - 10}px` });
-  if (arrowRight)  Object.assign(arrowRight.style,  { left:`${base.x + base.w + 6}px`,     top:`${base.y + base.h/2 - 10}px` });
-}
-
-// 닫기
-function closeAll(){
-  pop.hidden=true;
-  sub.hidden=true;
-  selected.forEach(undecorate);
-  selected = [];
-}
-
-// ───────────── 서브팝업 (도킹형) ─────────────
-function openSubForToken(tokEl, surf, read, lemma){
+// ===== 서브팝업(토큰) =====
+async function openSubForToken(tokEl, token){
   currentTokenEl = tokEl;
-  const hasLemma = (lemma||"").trim().length>0;
+  sub.hidden=false;
 
-  // 1줄: [ruby(surf/read)] – (lemma) – 번역
-  (async()=>{
-    // 번역은 토큰 단위로
-    let tr = "";
-    try{
-      const t = await translateJaKo(surf);
-      tr = t?.text || t?.result || "";
-    }catch{}
+  // 항상 메인팝업 아래에 밀착(요구)
+  placeSubDetached(pop, tokEl, sub, 6);
+  const headLink = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(token.lemma||token.surf)}`;
 
-    const ruby = read ? `<ruby>${esc(surf)}<rt>${esc(kataToHira(read))}</rt></ruby>` : esc(surf);
-    const lemmaPart = hasLemma ? ` <span class="lemma">(${esc(lemma)})</span>` : "";
-    sub.innerHTML = `
-      <div class="sub-line">
-        <a class="morph-link" href="javascript:void(0)">${ruby}</a>${lemmaPart}
-        <span class="sep"> — </span>
-        <span class="mtr">${esc(tr)}</span>
+  // 한 줄: (루비)표기  (lemma)  —  번역
+  sub.innerHTML = `
+    <div class="sub-wrap">
+      <div class="sub-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <a href="${headLink}" target="_blank" style="text-decoration:underline;color:#9bd1ff;">
+          ${token.read ? `<ruby>${escapeHtml(token.surf)}<rt style="font-size:11px">${escapeHtml(kataToHira(token.read))}</rt></ruby>` : escapeHtml(token.surf)}
+          <span style="opacity:.7">(${escapeHtml(token.lemma||token.surf)})</span>
+        </a>
+        <span id="tok-trans" style="opacity:.95"></span>
       </div>
-      <div class="kanji-row"></div>
-      <div class="anki-explain" hidden></div>
-    `;
+      <div id="kanji-row" class="sub-row" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    </div>`;
 
-    // 네이버 사전: 형태소 클릭 시
-    sub.querySelector(".morph-link").onclick = ()=> openNaverJaLemma(surf);
+  // 번역(단어 단위)
+  try{
+    const tr = await translateJaKo(token.lemma||token.surf);
+    const t = tr?.text || tr?.result || tr?.translation || "";
+    sub.querySelector("#tok-trans").textContent = t ? "— "+t : "";
+  }catch{ sub.querySelector("#tok-trans").textContent = ""; }
 
-    // 2줄: 한자 박스 가로 나열 (DB → ANKI 우선)
-    const row = sub.querySelector(".kanji-row");
-    const exp = sub.querySelector(".anki-explain");
-    const used = new Set();
-
-    for (const ch of (surf.match(/[\u4E00-\u9FFF]/g)||[])){
-      if (used.has(ch)) continue;
-      used.add(ch);
-      const anki = ANKI_MAP?.get(ch);
-      const base = KANJI_MAP?.get(ch);
-
-      const box = document.createElement("button");
-      box.className = "kanji-box";
-      box.textContent = ch;
-
-      if (anki){ // 안키 우선
-        box.classList.add("anki");
-        box.onclick = ()=>{
-          exp.innerHTML = `
-            <div class="exp-h"><strong>${ch}</strong> · ${esc(anki.gloss||"")}</div>
-            ${anki.explain ? `<div class="exp-b">${anki.explain}</div>` : ``}
-          `;
-          exp.hidden = false;
-        };
-      }else if (base){
-        box.classList.add("db");
-        const gloss =
-          base.뜻 || base.의미 || base.ko || base.mean || base.korean || base.gloss || "";
-        box.title = gloss || "";
-        box.onclick = ()=> openNaverHanja(ch);
+  // Kanji row
+  await DB_READY;
+  const ks = (token.surf.match(/[\u4E00-\u9FFF]/g)||[]);
+  const row = sub.querySelector("#kanji-row");
+  for (const ch of new Set(ks)){
+    const box = document.createElement("button");
+    box.textContent = ch;
+    Object.assign(box.style,{
+      border:"1px solid #2a2f3b", padding:"4px 8px", borderRadius:"8px",
+      background: ANKI?.get?.(ch) ? "#2d3b29" : (lookupKO(ch) ? "#222a39" : "#2a2a2a"),
+      color:"#e8eefc", cursor:"pointer", fontWeight:"700"
+    });
+    box.addEventListener("click",(e)=>{
+      e.stopPropagation();
+      const ex = ANKI?.get?.(ch);
+      if (ex){
+        // 아래 설명 토글
+        let exEl = box.nextElementSibling;
+        if (exEl?.className!=="kanji-explain"){
+          exEl = document.createElement("div");
+          exEl.className="kanji-explain";
+          exEl.style.cssText="flex-basis:100%; font-size:13px; opacity:.9; padding-top:2px;";
+          box.after(exEl);
+        }else{
+          exEl.remove(); return;
+        }
+        exEl.textContent = ex;
       }else{
-        box.classList.add("ext");
-        box.onclick = ()=> openNaverHanja(ch);
+        const ko = lookupKO(ch);
+        if (ko){
+          // 간단 훈음만 보여주고, 다시 누르면 네이버
+          alert(`${ch} : ${ko}`);
+        }else{
+          openNaverHanja(ch);
+        }
       }
-      row.appendChild(box);
-    }
-
-    // 도킹 및 바깥 클릭 시 닫기
-    sub.hidden = false;
-    dockSub();
-  })();
+    });
+    row.appendChild(box);
+  }
 }
-function dockSub(){
-  const pr = pop.getBoundingClientRect();
-  const left = pr.left + scrollX;
-  const top  = pr.bottom + 8 + scrollY;
-  Object.assign(sub.style, { left:`${left}px`, top:`${top}px`, width:`${pr.width}px` });
+function lookupKO(ch){
+  if (!KANJI) return "";
+  const v = KANJI[ch];
+  if (!v) return "";
+  // 다양한 필드명 대응(가벼운 휴리스틱)
+  return (v.ko || v.mean || v.korean || v.gloss || v.def || "").toString();
 }
 
-// ───────────── 수정 다이얼로그 헬퍼 ─────────────
-function openEdit(e){ e?.stopPropagation?.(); editInput.value=currentSentence||""; editDlg.showModal(); }
-document.getElementById("btnEdit").onclick = openEdit;
+// ===== 리사이즈/스크롤 시 재배치 =====
+function relayout(){
+  renderOverlay();
+  if(currentAnchor && !pop.hidden) placeMainPopover(currentAnchor, pop, 8);
+  if(currentTokenEl && !sub.hidden) placeSubDetached(pop, currentTokenEl, sub, 6);
+}
+addEventListener("resize", relayout, {passive:true});
+globalThis.visualViewport?.addEventListener("resize", relayout, {passive:true});
+addEventListener("scroll", relayout, {passive:true});
+
+// ===== 바깥(팝업 외 영역) 클릭 시 — 메인은 유지, 서브만 닫기 =====
+stage.addEventListener("click",(e)=>{
+  if (!sub.hidden && !sub.contains(e.target)) sub.hidden = true;
+  // 메인 팝업 닫기는 사이드 ✕ 버튼으로만(요청사항)
+});
