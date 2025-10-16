@@ -12,21 +12,20 @@
     <div id="overlay"></div>
     <div id="hint">이미지 불러오는 중…</div>
 
+    <!-- 메인 팝업: 제목 라벨(원문/번역) 제거, 드래그/닫기/수정 -->
     <div id="pop" class="popover" hidden>
-      <div class="pop-head">
-        <strong>원문</strong>
+      <div class="pop-head drag-handle" id="popDrag">
         <div class="pop-actions">
           <button id="btnEdit" class="btn sm">수정</button>
           <button id="btnClose" class="btn sm ghost">닫기</button>
         </div>
       </div>
       <div id="rubyLine" class="ruby-line"></div>
-      <div id="origLine" class="orig-line"></div>
       <hr class="sep" />
-      <div class="pop-head"><strong>번역</strong></div>
       <div id="transLine" class="trans-line">…</div>
     </div>
 
+    <!-- 수정 다이얼로그 -->
     <dialog id="editDlg">
       <form method="dialog" class="edit-form">
         <label>원문 수정</label>
@@ -38,7 +37,11 @@
       </form>
     </dialog>
 
-    <div id="sub" class="subpop" hidden></div>
+    <!-- 서브 팝업: 바깥 클릭 시 닫힘, 상단 드래그 -->
+    <div id="sub" class="subpop" hidden>
+      <div class="sub-head drag-handle" id="subDrag"></div>
+      <div id="subBody"></div>
+    </div>
   </main>
 
   <script type="module" src="./src/app.js"></script>
