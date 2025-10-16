@@ -1,148 +1,269 @@
-import { getImageById, gcvOCR, getFurigana, translateJaKo, openNaverJaLemma, openNaverHanja } from "./api.js";
-import { placeMainPopover, placeSubDetached } from "./place.js";
+// app.js — overlay 부트스트랩 + 팝업/토큰/연결모드
+import { getImageById, gcvOCR, furigana, translateJaKo } from "./api.js";
+import { placeMainPopup, placeSubPopup } from "./place.js";
 
-const stage   = document.getElementById("stage");
-const imgEl   = document.getElementById("img");
-const overlay = document.getElementById("overlay");
-const hint    = document.getElementById("hint");
-const pop     = document.getElementById("pop");
-const sub     = document.getElementById("sub");
-const btnEdit = document.getElementById("btnEdit");
-const rubyLine= document.getElementById("rubyLine");
-const origLine= document.getElementById("origLine");
-const transLine=document.getElementById("transLine");
-const editDlg = document.getElementById("editDlg");
-const editInput=document.getElementById("editInput");
-
-let annos=[], currentSentence="", currentAnchor=null, currentTokenEl=null;
-
-// 월 1,000건 로컬 카운트
-function quotaKey(){ const d=new Date(); return `gcv_quota_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}`; }
-function tryConsumeQuota(){ const k=quotaKey(); const n=+(localStorage.getItem(k)||0); if(n>=1000) return{ok:false,key:k,n}; localStorage.setItem(k, n+1); return{ok:true,key:k,n:n+1}; }
-function rollbackQuota(k){ const n=+(localStorage.getItem(k)||1); localStorage.setItem(k, Math.max(0,n-1)); }
-
+// ────────────────────────────────────────────────────────────
 // 유틸
-const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-const hasKanji   = s => /[\u4E00-\u9FFF\u3400-\u4DBF]/.test(s||"");
-const kataToHira = s => (s||"").replace(/[\u30a1-\u30f6]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
+const esc = (s="") => s.replace(/[&<>"']/g, m=>({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[m]));
+const kataToHira = (s="") => s.replace(/[\u30a1-\u30f6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+const hasKanji = (s="") => /[\u4E00-\u9FFF]/.test(s);
 
-(async function bootstrap(){
-  try{
-    const qs=new URLSearchParams(location.search); const id=qs.get("id");
-    if(!id) throw new Error("?id= 필요");
-
-    imgEl.onload = async ()=>{
-      const q=tryConsumeQuota(); if(!q.ok){ hint.textContent="월간 무료 사용량 초과"; return; }
-      try{
-        hint.textContent="OCR(Google) 중…";
-        annos = await gcvOCR(id);
-        if(!annos.length){ hint.textContent="문장을 찾지 못했습니다."; return; }
-        hint.textContent="문장을 탭하세요"; renderOverlay();
-      }catch(e){ rollbackQuota(q.key); hint.textContent="OCR 오류"; console.error(e); }
-    };
-    imgEl.src = await getImageById(id);
-  }catch(e){ hint.textContent = e.message; }
-})();
-
-function renderOverlay(){
-  const rect=imgEl.getBoundingClientRect();
-  overlay.style.width=rect.width+"px"; overlay.style.height=rect.height+"px";
-  const sx=rect.width/imgEl.naturalWidth, sy=rect.height/imgEl.naturalHeight;
-
-  overlay.innerHTML="";
-  for(const a of annos){
-    const [p0,p1,p2,p3]=a.polygon;
-    const l=Math.min(p0[0],p3[0])*sx, t=Math.min(p0[1],p1[1])*sy;
-    const r=Math.max(p1[0],p2[0])*sx, b=Math.max(p2[1],p3[1])*sy;
-    const box=document.createElement("div");
-    box.className="box"; Object.assign(box.style,{ left:l+"px", top:t+"px", width:(r-l)+"px", height:(b-t)+"px" });
-    box.dataset.text=a.text||"";
-    box.addEventListener("click", (ev)=>{ ev.stopPropagation(); onSelectBox(box); });
-    overlay.appendChild(box);
-  }
-}
-function onSelectBox(box){
-  overlay.querySelectorAll(".box").forEach(b=>b.classList.remove("active"));
-  box.classList.add("active"); currentSentence=box.dataset.text||""; currentAnchor=box;
-  openMainPopover(currentAnchor, currentSentence);
+// 토큰 → ru​by HTML (각 토큰을 .tok 래퍼로 감싸 클릭 대상 고정)
+function buildRuby(tokens) {
+  return tokens.map((t, i) => {
+    const surf = t.surface || t.text || t.form || t.word || "";
+    const read = kataToHira(t.reading || t.read || t.yomi || "");
+    const body = (hasKanji(surf) && read)
+      ? `<ruby>${esc(surf)}<rt>${esc(read)}</rt></ruby>`
+      : esc(surf);
+    return `<span class="tok" data-i="${i}">${body}</span>`;
+  }).join("");
 }
 
-// 리사이즈/스크롤 대응
-function resizeRelayout(){
-  renderOverlay();
-  if(currentAnchor && !pop.hidden) placeMainPopover(currentAnchor, pop, 8);
-  if(currentTokenEl && !sub.hidden) placeSubDetached(pop, currentTokenEl, sub, 8);
-}
-window.addEventListener("resize", resizeRelayout,{passive:true});
-globalThis.visualViewport?.addEventListener("resize", resizeRelayout,{passive:true});
-window.addEventListener("scroll", resizeRelayout,{passive:true});
-
-// 바깥 클릭 시 닫기
-document.getElementById("stage").addEventListener("click",(e)=>{
-  if(!pop.hidden && !pop.contains(e.target)){ pop.hidden=true; sub.hidden=true; overlay.querySelectorAll(".box").forEach(b=>b.classList.remove("active")); }
-});
-
-function openMainPopover(anchor, text){
-  pop.hidden=false;
-  const aw=anchor.getBoundingClientRect().width, overlayW=overlay.clientWidth;
-  pop.style.width=Math.min(Math.max(Math.round(aw*1.1),420), Math.round(overlayW*0.92))+"px";
-  placeMainPopover(anchor, pop, 8);
-
-  rubyLine.innerHTML=""; origLine.innerHTML=""; transLine.textContent="…";
-
-  text.split(/(\s+)/).forEach(tok=>{
-    if(tok==='') return;
-    if(/^\s+$/.test(tok)){ origLine.appendChild(document.createTextNode(tok)); return; }
-    const span=document.createElement("span");
-    span.className="tok"; span.textContent=tok;
-    span.addEventListener("click",(ev)=>{ ev.stopPropagation(); openSubForToken(span, tok); });
-    origLine.appendChild(span);
-  });
-
-  (async()=>{
-    try{
-      const [rubi, tr] = await Promise.all([ getFurigana(text), translateJaKo(text) ]);
-      const tokens = rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes || [];
-      rubyLine.innerHTML = tokens.map(t=>{
-        const surf = t.surface || t.text || "";
-        const read = kataToHira(t.reading || t.read || "");
-        if(hasKanji(surf) && read) return `<ruby>${escapeHtml(surf)}<rt>${escapeHtml(read)}</rt></ruby>`;
-        return escapeHtml(surf);
-      }).join("");
-
-      const translated = tr?.text || tr?.result || tr?.translation || "";
-      transLine.textContent = translated || "(번역 없음)";
-      requestAnimationFrame(()=> placeMainPopover(anchor, pop, 8));
-    }catch(e){
-      transLine.textContent="(번역 실패)";
-      console.error(e);
-    }
-  })();
-}
-
-// 수정
-btnEdit.addEventListener("click",(e)=>{
-  e.stopPropagation(); editInput.value=currentSentence||""; editDlg.showModal();
-});
-document.getElementById("editOk").addEventListener("click", ()=>{
-  const t=editInput.value.trim(); if(!t){ editDlg.close(); return; }
-  currentSentence=t; editDlg.close(); openMainPopover(currentAnchor, currentSentence);
-});
-
-// 서브팝업
-function openSubForToken(tokEl, token){
-  currentTokenEl=tokEl;
-  sub.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-      <strong style="font-size:16px">${escapeHtml(token)}</strong>
-      <div style="display:flex;gap:10px">
-        ${token.length===1
-          ? `<a href="javascript:void(0)" id="openHanja">네이버 한자</a>`
-          : `<a href="javascript:void(0)" id="openLemma">네이버 사전</a>`}
-      </div>
+// 서브팝업 콘텐츠(간단형 – 필요 시 확장)
+function buildSubPopupHTML(t) {
+  const surf = t.surface || t.text || t.form || t.word || "";
+  const read = kataToHira(t.reading || t.read || t.yomi || "");
+  const base = t.base || t.lemma || t.dictionary_form || "";
+  const pos  = t.pos || t.partOfSpeech || t.tag || "";
+  const navLink = hasKanji(surf)
+    ? `<a class="ext" href="https://hanja.dict.naver.com/search?query=${encodeURIComponent(surf)}" target="_blank" rel="noopener">네이버 사전</a>`
+    : "";
+  return `
+    <div class="sub-wrap">
+      <div class="sub-h"><span>형태소</span></div>
+      <div class="sub-row"><b>표면</b> ${esc(surf)}</div>
+      <div class="sub-row"><b>독음</b> ${esc(read)}</div>
+      ${base ? `<div class="sub-row"><b>원형</b> ${esc(base)}</div>` : ""}
+      ${pos  ? `<div class="sub-row"><b>품사</b> ${esc(pos)}</div>` : ""}
+      <div class="sub-actions">${navLink}</div>
     </div>`;
-  sub.hidden=false; placeSubDetached(pop, tokEl, sub, 8);
-  const a1=document.getElementById("openLemma"); const a2=document.getElementById("openHanja");
-  if(a1) a1.onclick=()=> openNaverJaLemma(token);
-  if(a2) a2.onclick=()=> openNaverHanja(token);
 }
+
+// ────────────────────────────────────────────────────────────
+// 전역 상태
+const S = {
+  imgEl: null,
+  viewW: 0,
+  viewH: 0,
+  annos: [],
+  // 연결 모드 누적
+  agg: { ids: [], text: "" },
+  popupEl: null,
+  subEl: null,
+  lastTokens: [],
+  // 현재 기준 박스(bbox) — 팝업 위치 계산용
+  anchorBox: null
+};
+
+// 문장상자 DOM 그리기 (bbox: polygon→rect 추정)
+function drawBoxes(annos) {
+  const layer = document.getElementById("boxes") || (() => {
+    const d = document.createElement("div");
+    d.id = "boxes";
+    d.className = "boxes-layer";
+    document.body.appendChild(d);
+    return d;
+  })();
+  layer.innerHTML = "";
+  annos.forEach((a, idx) => {
+    const vs = a.polygon || [];
+    const xs = vs.map(v => v[0]); const ys = vs.map(v => v[1]);
+    const x = Math.min(...xs), y = Math.min(...ys);
+    const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+
+    const b = document.createElement("div");
+    b.className = "box";
+    b.style.left = `${x}px`; b.style.top = `${y}px`;
+    b.style.width = `${w}px`; b.style.height = `${h}px`;
+    b.dataset.idx = idx;
+
+    // 박스 탭 → 연결모드 반영
+    b.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      onBoxTap(a, { x, y, w, h });
+    });
+
+    layer.appendChild(b);
+  });
+}
+
+// 팝업 생성 (닫기 버튼만으로 닫힘)
+function createPopupEl() {
+  const el = document.createElement("div");
+  el.className = "main-popup";
+  el.innerHTML = `
+    <div class="mp-head">
+      <div class="mp-title">원문</div>
+      <div class="mp-actions">
+        <button class="btn sm" data-act="edit">수정</button>
+        <button class="btn sm danger" data-act="close">닫기</button>
+      </div>
+    </div>
+    <div class="mp-orig"></div>
+    <div class="mp-sec">
+      <div class="mp-st">번역</div>
+      <div class="mp-trans"></div>
+    </div>
+  `;
+  document.body.appendChild(el);
+  // 닫기
+  el.querySelector('[data-act="close"]').onclick = () => closePopup();
+  // 수정
+  el.querySelector('[data-act="edit"]').onclick = () => openEdit();
+  // 바깥 클릭으로 닫지 않음(no backdrop close)
+  return el;
+}
+
+// 팝업 열기(새 세션 시작)
+function openPopup(anchorBox) {
+  if (S.popupEl) S.popupEl.remove();
+  S.popupEl = createPopupEl();
+  S.anchorBox = anchorBox;
+  placeMainPopup(S.popupEl, anchorBox, { vw: S.viewW, vh: S.viewH }); // 상/하 배치
+}
+
+// 팝업 닫기(연결모드 리셋)
+function closePopup() {
+  S.agg = { ids: [], text: "" };
+  S.lastTokens = [];
+  if (S.subEl) { S.subEl.remove(); S.subEl = null; }
+  if (S.popupEl) { S.popupEl.remove(); S.popupEl = null; }
+  S.anchorBox = null;
+}
+
+// 수정 팝업(간단 인라인)
+function openEdit() {
+  if (!S.popupEl) return;
+  const areaId = "mp-edit-area";
+  const orig = S.popupEl.querySelector(".mp-orig");
+  const now = S.agg.text;
+  const dlg = document.createElement("div");
+  dlg.className = "edit-dlg";
+  dlg.innerHTML = `
+    <textarea id="${areaId}" rows="4">${esc(now)}</textarea>
+    <div class="edit-actions">
+      <button class="btn sm" data-act="apply">적용</button>
+      <button class="btn sm danger" data-act="cancel">취소</button>
+    </div>
+  `;
+  // 임시로 원문영역 위에 띄움
+  orig.before(dlg);
+  dlg.querySelector('[data-act="apply"]').onclick = async () => {
+    const nv = dlg.querySelector("textarea").value.trim();
+    if (nv) {
+      S.agg.text = nv;
+      await refreshPopupContents(); // 후리가나/번역 재생성
+    }
+    dlg.remove();
+  };
+  dlg.querySelector('[data-act="cancel"]').onclick = () => dlg.remove();
+}
+
+// 원문(ru​by) 클릭 시 서브팝업 — 형태소는 ru​by에만 부착됨
+function wireTokenClicks() {
+  const container = S.popupEl?.querySelector(".mp-orig");
+  if (!container) return;
+  container.onclick = (e) => {
+    const tEl = e.target.closest(".tok");
+    if (!tEl) return;
+    const i = +tEl.dataset.i;
+    const tok = S.lastTokens[i] || {};
+    showSubPopup(tok);
+  };
+}
+
+// 서브팝업 표시(메인팝업 외측 하단 고정)
+function showSubPopup(tok) {
+  if (!S.popupEl) return;
+  if (!S.subEl) {
+    S.subEl = document.createElement("div");
+    S.subEl.className = "sub-popup";
+    document.body.appendChild(S.subEl);
+  }
+  S.subEl.innerHTML = buildSubPopupHTML(tok);
+  placeSubPopup(S.subEl, S.popupEl); // detached-bottom 고정
+}
+
+// 현재 누적 텍스트로 후리가나/번역 갱신
+async function refreshPopupContents() {
+  if (!S.popupEl) return;
+  const t = S.agg.text;
+
+  // 후리가나
+  let rubi;
+  try {
+    rubi = await furigana(t);
+  } catch (e) {
+    rubi = {};
+  }
+  const tokens = (
+    rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes ||
+    rubi?.data?.tokens || rubi?.data?.morphs || []
+  );
+  S.lastTokens = tokens;
+  S.popupEl.querySelector(".mp-orig").innerHTML = buildRuby(tokens);
+  wireTokenClicks();
+
+  // 번역
+  let tr = "";
+  try {
+    const r = await translateJaKo(t);
+    tr = r?.text || r?.result || r?.translation || "";
+  } catch (e) {
+    tr = "(번역 실패)";
+  }
+  S.popupEl.querySelector(".mp-trans").textContent = tr;
+}
+
+// 문장상자 탭 처리: 팝업이 열려있으면 연결, 아니면 새로 열기
+async function onBoxTap(anno, rect) {
+  const text = (anno.text || "").trim();
+  if (!text) return;
+
+  if (!S.popupEl) {
+    // 새 세션
+    S.agg = { ids: [rect], text };
+    openPopup(rect);
+  } else {
+    // 연결 모드: 누적
+    S.agg.ids.push(rect);
+    S.agg.text += text; // 일본어는 공백 없이 자연 연결
+  }
+  await refreshPopupContents();
+}
+
+// 이미지/페이지 초기화
+async function bootstrap() {
+  // 뷰포트 기준 크기
+  S.viewW = document.documentElement.clientWidth;
+  S.viewH = document.documentElement.clientHeight;
+
+  // URL의 id 파라미터로 이미지 로드
+  const params = new URLSearchParams(location.search);
+  const id = params.get("id");
+  if (!id) {
+    document.body.innerHTML = `<div class="hint">id가 없습니다.</div>`;
+    return;
+  }
+
+  // 이미지 태그
+  const img = new Image();
+  img.id = "screenshot";
+  img.alt = "screenshot";
+  img.onload = async () => {
+    S.imgEl = img;
+    // OCR
+    try {
+      S.annos = await gcvOCR(id);
+    } catch (e) {
+      S.annos = [];
+    }
+    drawBoxes(S.annos);
+  };
+  img.src = await getImageById(id);
+  document.body.appendChild(img);
+
+  // 배경 클릭해도 닫지 않음(요청사항) — 아무 동작 X
+}
+bootstrap();
