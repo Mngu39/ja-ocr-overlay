@@ -1,238 +1,184 @@
-// ✅ 기존 import 유지
-import { getImageById, gcvOCR, furigana, translateJaKo } from "./api.js";
-import { placeMainPopup, placeSubPopup } from "./place.js";
+import { getImageById, gcvOCR, getFurigana, translateJaKo, openNaverJaLemma, openNaverHanja } from "./api.js";
+import { placeMainPopover, placeSubDetached } from "./place.js";
 
-/* -------------------- 최소 유틸 (추가) -------------------- */
-const esc = (s="") => s.replace(/[&<>"']/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
-const kataToHira = (s="") => s.replace(/[\u30a1-\u30f6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
-const hasKanji = (s="") => /[\u4E00-\u9FFF]/.test(s);
+const stage   = document.getElementById("stage");
+const imgEl   = document.getElementById("img");
+const overlay = document.getElementById("overlay");
+const hint    = document.getElementById("hint");
+const pop     = document.getElementById("pop");
+const sub     = document.getElementById("sub");
+const btnEdit = document.getElementById("btnEdit");
+const rubyLine= document.getElementById("rubyLine");
+const origLine= document.getElementById("origLine");
+const transLine=document.getElementById("transLine");
+const editDlg = document.getElementById("editDlg");
+const editInput=document.getElementById("editInput");
 
-/** 토큰 → ruby HTML (형태소 클릭 가능하도록 .tok 래퍼) */
-function buildRuby(tokens){
+let annos=[], currentSentence="", currentAnchor=null, currentTokenEl=null;
+// ⬇︎ 추가: 최근 후리가나 토큰(형태소) 보관 (서브팝업용)
+let lastFuriganaTokens = [];
+
+// 월 1,000건 로컬 카운트
+function quotaKey(){ const d=new Date(); return `gcv_quota_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}`; }
+function tryConsumeQuota(){ const k=quotaKey(); const n=+(localStorage.getItem(k)||0); if(n>=1000) return{ok:false,key:k,n}; localStorage.setItem(k, n+1); return{ok:true,key:k,n:n+1}; }
+function rollbackQuota(k){ const n=+(localStorage.getItem(k)||1); localStorage.setItem(k, Math.max(0,n-1)); }
+
+// 유틸
+const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+const hasKanji   = s => /[\u4E00-\u9FFF\u3400-\u4DBF]/.test(s||"");
+const kataToHira = s => (s||"").replace(/[\u30a1-\u30f6]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
+
+// ⬇︎ 추가: 루비용 토큰을 클릭 가능한 .tok로 감싸서 렌더
+function renderRubyFromTokens(tokens){
   return tokens.map((t,i)=>{
-    const surf = t.surface || t.text || t.form || t.word || "";
-    const read = kataToHira(t.reading || t.read || t.yomi || "");
+    const surf = t.surface || t.text || "";
+    const read = kataToHira(t.reading || t.read || "");
     const body = (hasKanji(surf) && read)
-      ? `<ruby>${esc(surf)}<rt>${esc(read)}</rt></ruby>`
-      : esc(surf);
-    return `<span class="tok" data-i="${i}">${body}</span>`;
+      ? `<ruby>${escapeHtml(surf)}<rt>${escapeHtml(read)}</rt></ruby>`
+      : escapeHtml(surf);
+    return `<span class="tok" data-idx="${i}">${body}</span>`;
   }).join("");
 }
 
-/* -------------------- 전역 상태 (추가) -------------------- */
-const S = {
-  annos: [],
-  imgEl: null,
-  vw: 0, vh: 0,
-  // 연결 모드 누적
-  aggText: "",
-  // 팝업/서브팝업
-  popupEl: null,
-  subEl: null,
-  // 마지막 토큰(서브팝업 데이터)
-  tokens: [],
-  // 팝업 기준 박스(상/하 배치용)
-  anchorBox: null,
-};
+(async function bootstrap(){
+  try{
+    const qs=new URLSearchParams(location.search); const id=qs.get("id");
+    if(!id) throw new Error("?id= 필요");
 
-/* -------------------- 박스 그리기 (기존 함수에 이벤트만 연결) -------------------- */
-function drawBoxes(annos){
-  let layer = document.getElementById("boxes");
-  if(!layer){
-    layer = document.createElement("div");
-    layer.id = "boxes";
-    layer.className = "boxes-layer";
-    document.body.appendChild(layer);
+    imgEl.onload = async ()=>{
+      const q=tryConsumeQuota(); if(!q.ok){ hint.textContent="월간 무료 사용량 초과"; return; }
+      try{
+        hint.textContent="OCR(Google) 중…";
+        annos = await gcvOCR(id);
+        if(!annos.length){ hint.textContent="문장을 찾지 못했습니다."; return; }
+        hint.textContent="문장을 탭하세요"; renderOverlay();
+      }catch(e){ rollbackQuota(q.key); hint.textContent="OCR 오류"; console.error(e); }
+    };
+    imgEl.src = await getImageById(id);
+  }catch(e){ hint.textContent = e.message; }
+})();
+
+function renderOverlay(){
+  const rect=imgEl.getBoundingClientRect();
+  overlay.style.width=rect.width+"px"; overlay.style.height=rect.height+"px";
+  const sx=rect.width/imgEl.naturalWidth, sy=rect.height/imgEl.naturalHeight;
+
+  overlay.innerHTML="";
+  for(const a of annos){
+    const [p0,p1,p2,p3]=a.polygon;
+    const l=Math.min(p0[0],p3[0])*sx, t=Math.min(p0[1],p1[1])*sy;
+    const r=Math.max(p1[0],p2[0])*sx, b=Math.max(p2[1],p3[1])*sy;
+    const box=document.createElement("div");
+    box.className="box"; Object.assign(box.style,{ left:l+"px", top:t+"px", width:(r-l)+"px", height:(b-t)+"px" });
+    box.dataset.text=a.text||"";
+    box.addEventListener("click", (ev)=>{ ev.stopPropagation(); onSelectBox(box); });
+    overlay.appendChild(box);
   }
-  layer.innerHTML = "";
-
-  annos.forEach((a, idx)=>{
-    const vs = a.polygon || [];
-    const xs = vs.map(v=>v[0]); const ys = vs.map(v=>v[1]);
-    const x = Math.min(...xs), y = Math.min(...ys);
-    const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
-
-    const el = document.createElement("div");
-    el.className = "box";
-    el.style.left = `${x}px`; el.style.top = `${y}px`;
-    el.style.width = `${w}px`; el.style.height = `${h}px`;
-    el.dataset.idx = idx;
-
-    // ✅ 최소 변경: 박스 클릭 시 연결 모드 동작
-    el.addEventListener("click", (ev)=>{
-      ev.stopPropagation();
-      onBoxTap(a, {x,y,w,h});
-    });
-
-    layer.appendChild(el);
-  });
 }
 
-/* -------------------- 팝업 최소 구현 (중복 제거) -------------------- */
-function ensurePopup(anchorBox){
-  if (!S.popupEl){
-    const el = document.createElement("div");
-    el.className = "main-popup";
-    el.innerHTML = `
-      <div class="mp-head">
-        <div class="mp-title">원문</div>
-        <div class="mp-actions">
-          <button class="btn sm" data-act="edit">수정</button>
-          <button class="btn sm danger" data-act="close">닫기</button>
-        </div>
-      </div>
-      <div class="mp-orig"></div>
-      <div class="mp-sec">
-        <div class="mp-st">번역</div>
-        <div class="mp-trans"></div>
-      </div>
-    `;
-    // 닫기 버튼으로만 닫힘 (배경 탭 닫기 없음)
-    el.querySelector('[data-act="close"]').onclick = closePopup;
-    el.querySelector('[data-act="edit"]').onclick = openEdit;
-    document.body.appendChild(el);
-    S.popupEl = el;
+// ⬇︎ 변경: 팝업 열린 상태면 문장 “연결”, 닫혀 있으면 새로 시작
+function onSelectBox(box){
+  // 이전엔 모두 비활성화했지만, 연결 모드에서는 기존 선택을 남겨두는 것이 직관적
+  if (pop.hidden) overlay.querySelectorAll(".box").forEach(b=>b.classList.remove("active"));
+  box.classList.add("active");
 
-    // ✅ 루비(원문)에서만 형태소 서브팝업
-    el.querySelector(".mp-orig").addEventListener("click", (e)=>{
-      const tokEl = e.target.closest(".tok");
-      if(!tokEl) return;
-      const i = +tokEl.dataset.i;
-      const tok = S.tokens[i] || {};
-      showSubPopup(tok);
-    });
+  const text = box.dataset.text || "";
+  currentAnchor = box;
+  if (pop.hidden) currentSentence = text;
+  else currentSentence += text; // 일본어 문장 연결은 공백 없이
+
+  openMainPopover(currentAnchor, currentSentence);
+}
+
+// 리사이즈/스크롤 대응
+function resizeRelayout(){
+  renderOverlay();
+  if(currentAnchor && !pop.hidden) placeMainPopover(currentAnchor, pop, 8);
+  if(currentTokenEl && !sub.hidden) placeSubDetached(pop, currentTokenEl, sub, 8);
+}
+window.addEventListener("resize", resizeRelayout,{passive:true});
+globalThis.visualViewport?.addEventListener("resize", resizeRelayout,{passive:true});
+window.addEventListener("scroll", resizeRelayout,{passive:true});
+
+// ⬇︎ 변경: 바깥 클릭해도 “메인 팝업은 닫지 않음”(연결 모드 유지). 대신 서브팝업만 닫기.
+document.getElementById("stage").addEventListener("click",(e)=>{
+  if (!sub.hidden && !sub.contains(e.target) && !pop.contains(e.target)) {
+    sub.hidden = true; currentTokenEl = null;
   }
-  S.anchorBox = anchorBox;
-  // 상/하 배치 (기존 place.js 로직 사용)
-  placeMainPopup(S.popupEl, anchorBox, { vw:S.vw, vh:S.vh });
-}
+});
 
-function closePopup(){
-  if (S.subEl){ S.subEl.remove(); S.subEl=null; }
-  if (S.popupEl){ S.popupEl.remove(); S.popupEl=null; }
-  S.aggText = "";
-  S.tokens = [];
-  S.anchorBox = null;
-}
+function openMainPopover(anchor, text){
+  pop.hidden=false;
+  const aw=anchor.getBoundingClientRect().width, overlayW=overlay.clientWidth;
+  pop.style.width=Math.min(Math.max(Math.round(aw*1.1),420), Math.round(overlayW*0.92))+"px";
+  placeMainPopover(anchor, pop, 8);
 
-function openEdit(){
-  if(!S.popupEl) return;
-  const wrap = document.createElement("div");
-  wrap.className = "edit-dlg";
-  wrap.innerHTML = `
-    <textarea rows="4">${esc(S.aggText)}</textarea>
-    <div class="edit-actions">
-      <button class="btn sm" data-act="apply">적용</button>
-      <button class="btn sm danger" data-act="cancel">취소</button>
-    </div>
-  `;
-  const orig = S.popupEl.querySelector(".mp-orig");
-  orig.before(wrap);
-  wrap.querySelector('[data-act="apply"]').onclick = async ()=>{
-    const v = wrap.querySelector("textarea").value.trim();
-    if (v){
-      S.aggText = v;
-      await refreshPopupContents();
+  // ⬇︎ 중복 제거: 원래의 origLine 토큰 분할 표시 제거
+  rubyLine.innerHTML=""; 
+  origLine.innerHTML=""; // 쓰지 않음(빈 상태 유지)
+  transLine.textContent="…";
+
+  // ⬇︎ 루비 라인에서만 형태소 클릭 허용 (위임)
+  rubyLine.onclick = (ev)=>{
+    const t = ev.target.closest(".tok");
+    if(!t) return;
+    const idx = +t.dataset.idx;
+    const tokObj = lastFuriganaTokens[idx] || null;
+    if (!tokObj) return;
+    openSubForMorph(t, tokObj);
+  };
+
+  (async()=>{
+    try{
+      const [rubi, tr] = await Promise.all([ getFurigana(text), translateJaKo(text) ]);
+
+      // ⬇︎ 후리가나 토큰 보강/저장
+      const tokens = rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes || [];
+      lastFuriganaTokens = tokens;
+      rubyLine.innerHTML = renderRubyFromTokens(tokens);
+
+      const translated = tr?.text || tr?.result || tr?.translation || "";
+      transLine.textContent = translated || "(번역 없음)";
+      requestAnimationFrame(()=> placeMainPopover(anchor, pop, 8));
+    }catch(e){
+      transLine.textContent="(번역 실패)";
+      console.error(e);
     }
-    wrap.remove();
-  };
-  wrap.querySelector('[data-act="cancel"]').onclick = ()=> wrap.remove();
+  })();
 }
 
-/* -------------------- 서브팝업 (루비 토큰 전용) -------------------- */
-function showSubPopup(t){
-  if(!S.popupEl) return;
-  if(!S.subEl){
-    S.subEl = document.createElement("div");
-    S.subEl.className = "sub-popup";
-    document.body.appendChild(S.subEl);
-  }
-  const surf = t.surface || t.text || t.form || t.word || "";
-  const read = kataToHira(t.reading || t.read || t.yomi || "");
-  const base = t.base || t.lemma || t.dictionary_form || "";
-  const pos  = t.pos  || t.partOfSpeech || t.tag || "";
+// 수정
+btnEdit.addEventListener("click",(e)=>{
+  e.stopPropagation(); editInput.value=currentSentence||""; editDlg.showModal();
+});
+document.getElementById("editOk").addEventListener("click", ()=>{
+  const t=editInput.value.trim(); if(!t){ editDlg.close(); return; }
+  currentSentence=t; editDlg.close(); openMainPopover(currentAnchor, currentSentence);
+});
 
-  S.subEl.innerHTML = `
-    <div class="sub-wrap">
-      <div class="sub-h"><span>형태소</span></div>
-      <div class="sub-row"><b>표면</b> ${esc(surf)}</div>
-      <div class="sub-row"><b>독음</b> ${esc(read)}</div>
-      ${base? `<div class="sub-row"><b>원형</b> ${esc(base)}</div>`:""}
-      ${pos ? `<div class="sub-row"><b>품사</b> ${esc(pos)}</div>`:""}
-      ${ hasKanji(surf)
-        ? `<div class="sub-actions"><a class="ext" target="_blank" rel="noopener" href="https://hanja.dict.naver.com/search?query=${encodeURIComponent(surf)}">네이버 사전</a></div>`
-        : "" }
+// ⬇︎ 변경: 서브팝업은 “루비 토큰 객체” 기준
+function openSubForMorph(tokEl, tokObj){
+  currentTokenEl = tokEl;
+  const surf = tokObj.surface || tokObj.text || "";
+  const read = kataToHira(tokObj.reading || tokObj.read || "");
+  sub.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div>
+        <div style="font-weight:700;font-size:16px">${escapeHtml(surf)}</div>
+        ${read ? `<div style="font-size:13px;opacity:.85">${escapeHtml(read)}</div>` : ""}
+      </div>
+      <div style="display:flex;gap:10px">
+        ${surf.length===1 && hasKanji(surf)
+          ? `<a href="javascript:void(0)" id="openHanja">네이버 한자</a>`
+          : `<a href="javascript:void(0)" id="openLemma">네이버 사전</a>`}
+      </div>
     </div>`;
-  placeSubPopup(S.subEl, S.popupEl); // detached-bottom
+  sub.hidden=false; placeSubDetached(pop, tokEl, sub, 8);
+  const a1=document.getElementById("openLemma"); const a2=document.getElementById("openHanja");
+  if(a1) a1.onclick=()=> openNaverJaLemma(surf);
+  if(a2) a2.onclick=()=> openNaverHanja(surf);
 }
 
-/* -------------------- 후리가나/번역 갱신 (중복 제거 핵심) -------------------- */
-async function refreshPopupContents(){
-  if(!S.popupEl) return;
-  const t = S.aggText;
-
-  // 후리가나(= 루비 한 번만 렌더)
-  let rubi = {};
-  try { rubi = await furigana(t); } catch {}
-  const tokens = (
-    rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes ||
-    rubi?.data?.tokens || rubi?.data?.morphs || []
-  );
-  S.tokens = tokens;
-  S.popupEl.querySelector(".mp-orig").innerHTML = buildRuby(tokens);
-
-  // 번역
-  let ko = "(번역 실패)";
-  try {
-    const r = await translateJaKo(t);
-    ko = r?.text || r?.result || r?.translation || ko;
-  } catch {}
-  S.popupEl.querySelector(".mp-trans").textContent = ko;
-}
-
-/* -------------------- 연결 모드: 박스 탭 처리 -------------------- */
-async function onBoxTap(anno, rect){
-  const text = (anno.text || "").trim();
-  if(!text) return;
-
-  if (!S.popupEl){
-    // 새 세션 시작
-    S.aggText = text;
-    ensurePopup(rect);
-  } else {
-    // 팝업 열려있으면 연결
-    S.aggText += text; // 일본어 특성상 공백 없이 접합
-  }
-  await refreshPopupContents();
-}
-
-/* -------------------- 부트스트랩 -------------------- */
-async function bootstrap(){
-  S.vw = document.documentElement.clientWidth;
-  S.vh = document.documentElement.clientHeight;
-
-  const id = new URLSearchParams(location.search).get("id");
-  if(!id){
-    document.body.innerHTML = `<div class="hint">id가 없습니다.</div>`;
-    return;
-  }
-
-  // ✅ 이미지 로딩: 예전 방식 그대로 유지 (구조 변경 없음)
-  const img = new Image();
-  img.id = "screenshot";
-  img.alt = "screenshot";
-  img.onload = async ()=>{
-    S.imgEl = img;
-    // OCR 호출 → 박스 렌더 (예전 흐름 그대로)
-    try { S.annos = await gcvOCR(id); } catch { S.annos = []; }
-    drawBoxes(S.annos);
-  };
-  img.onerror = ()=>{ /* 필요시 간단 경고만 */
-    alert("이미지를 불러오지 못했습니다.");
-  };
-  img.src = await getImageById(id);   // ← 기존 그대로
-  document.body.appendChild(img);
-
-  // 배경 탭으로 닫기 없음(요청사항) → 아무 이벤트도 안 둠
-}
-bootstrap();
+// (참고) 기존 함수 openSubForToken은 더 이상 사용하지 않지만, 다른 곳에서 참조 없으므로 제거하지 않고 그대로 둬도 무해.
+// 필요시 아래처럼 남겨 둘 수 있음.
+// function openSubForToken(tokEl, token){ ... }
