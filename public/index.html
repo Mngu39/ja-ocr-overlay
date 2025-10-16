@@ -12,7 +12,6 @@
     <div id="overlay"></div>
     <div id="hint">이미지 불러오는 중…</div>
 
-    <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
       <div class="pop-head">
         <strong>원문</strong>
@@ -21,17 +20,13 @@
           <button id="btnClose" class="btn sm ghost">닫기</button>
         </div>
       </div>
-      <!-- 후리가나 붙은 한 줄만 노출(토큰 클릭 가능) -->
       <div id="rubyLine" class="ruby-line"></div>
-      <!-- 중복 표시 방지: origLine은 비워둠 -->
-      <div id="origLine" class="orig-line" style="display:none"></div>
-
+      <div id="origLine" class="orig-line"></div>
       <hr class="sep" />
       <div class="pop-head"><strong>번역</strong></div>
       <div id="transLine" class="trans-line">…</div>
     </div>
 
-    <!-- 원문 수정 -->
     <dialog id="editDlg">
       <form method="dialog" class="edit-form">
         <label>원문 수정</label>
@@ -43,7 +38,6 @@
       </form>
     </dialog>
 
-    <!-- 형태소 서브팝업 -->
     <div id="sub" class="subpop" hidden></div>
   </main>
 
