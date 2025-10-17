@@ -1,5 +1,5 @@
-// /src/app.js — compact & stable (+minimal fixes)
-import { getImageById, gcvOCR, getFurigana, translateJaKo, openNaverJaLemma, openNaverHanja } from "./api.js";
+// /src/app.js — stable loader + requested tweaks (<=400 lines)
+import { getImageById, gcvOCR, getFurigana, translateJaKo, openNaverJaLemma } from "./api.js";
 import { placeMainPopover, placeSubDetached } from "./place.js";
 
 const stage   = document.getElementById("stage");
@@ -9,22 +9,21 @@ const hint    = document.getElementById("hint");
 
 const pop       = document.getElementById("pop");
 const rubyLine  = document.getElementById("rubyLine");
-const origLine  = document.getElementById("origLine"); // 쓰지 않음(중복 제거)
+const origLine  = document.getElementById("origLine"); // 숨김(중복 제거)
 const transLine = document.getElementById("transLine");
 const editDlg   = document.getElementById("editDlg");
 const editInput = document.getElementById("editInput");
 const btnEdit   = document.getElementById("btnEdit");
-
-const sub = document.getElementById("sub");
+const sub       = document.getElementById("sub");
 
 let annos = [];                // { text, polygon:[[x,y]..] }
 let currentAnchor = null;      // 앵커 박스(또는 합성 앵커)
 let currentSentence = "";
 let currentTokenEl = null;
 
-// ===== Kanji DBs (지연로드: 이미지 로더를 절대 막지 않음) =====
-let KANJI = null;      // 일반 DB: /kanji_ko_attr_irreg.min.json
-let ANKI  = null;      // 사용자 덱: /일본어_한자_암기박사/deck.json
+/* ================= Kanji DBs (지연로드: 로더 방해 X) ================= */
+let KANJI = null; // /kanji_ko_attr_irreg.min.json
+let ANKI  = null; // /일본어_한자_암기박사/deck.json (Map<char, explain>)
 async function loadKanjiDBs(){
   try{
     const [j1, j2] = await Promise.allSettled([
@@ -32,37 +31,36 @@ async function loadKanjiDBs(){
       fetch(encodeURI("./일본어_한자_암기박사/deck.json")).then(r=>r.ok?r.json():null)
     ]);
     KANJI = j1.status==="fulfilled" ? j1.value : null;
+
     if (j2.status==="fulfilled" && j2.value){
       const m = new Map();
       const arr = Array.isArray(j2.value) ? j2.value
-                  : Array.isArray(j2.value.notes) ? j2.value.notes
-                  : Object.values(j2.value);
+                : Array.isArray(j2.value.notes) ? j2.value.notes
+                : Object.values(j2.value);
       for (const row of (arr||[])){
-        const textBlob = JSON.stringify(row);
-        const m1 = textBlob && textBlob.match(/[\u4E00-\u9FFF]/g);
-        if (!m1) continue;
+        const blob = JSON.stringify(row);
+        const ks = blob && blob.match(/[\u4E00-\u9FFF]/g);
+        if (!ks) continue;
         const explain = (row.explain || row.desc || row.meaning || row.back || row.definition || "").toString();
-        for (const ch of new Set(m1)) {
-          if (!m.has(ch)) m.set(ch, explain || "");
-        }
+        for (const ch of new Set(ks)){ if (!m.has(ch)) m.set(ch, explain||""); }
       }
-      ANKI = m; // Map<char, explain>
+      ANKI = m;
     }
-  }catch{ /* ignore */ }
+  }catch{/*ignore*/}
 }
 const DB_READY = loadKanjiDBs().catch(()=>null);
 
-// ===== 유틸 =====
-const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+/* ================= Utils ================= */
+const esc = s => (s||"").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 const kataToHira = s => (s||"").replace(/[\u30a1-\u30f6]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
 const hasKanji   = s => /[\u3400-\u9FFF]/.test(s||"");
 
-// 월 1,000건 로컬 카운트(간단)
+// 월 1,000건 로컬 카운트
 function quotaKey(){ const d=new Date(); return `gcv_quota_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}`; }
 function tryConsumeQuota(){ const k=quotaKey(); const n=+(localStorage.getItem(k)||0); if(n>=1000) return{ok:false,key:k,n}; localStorage.setItem(k, n+1); return{ok:true,key:k,n:n+1}; }
 function rollbackQuota(k){ const n=+(localStorage.getItem(k)||1); localStorage.setItem(k, Math.max(0,n-1)); }
 
-// ===== 이미지 → OCR =====
+/* ================= 이미지 → OCR (네가 준 로더 그대로) ================= */
 (async function bootstrap(){
   try{
     // 헤더("원문/번역") 숨김 + 원문 라인 숨김
@@ -84,12 +82,14 @@ function rollbackQuota(k){ const n=+(localStorage.getItem(k)||1); localStorage.s
       }catch(e){ rollbackQuota(q.key); console.error(e); hint.textContent="OCR 오류"; }
     };
     imgEl.onerror = ()=>{ hint.textContent="이미지를 불러오지 못했습니다"; };
-    imgEl.src = (await getImageById(id)) + `&t=${Date.now()}`; // 캐시 버스터(사파리 안전)
+
+    // ← 사파리 안전 캐시버스터: 이 줄이 '잘 되던' 핵심
+    imgEl.src = (await getImageById(id)) + `&t=${Date.now()}`;
   }catch(e){ hint.textContent=e.message; }
 })();
 
-// ===== 오버레이 박스 =====
-const sel = []; // 선택 순서 배열(요청대로 토글·순서 유지)
+/* ================= 오버레이 박스 ================= */
+const sel = []; // 선택 순서(토글)
 function renderOverlay(){
   const rect=imgEl.getBoundingClientRect();
   overlay.style.width=rect.width+"px"; overlay.style.height=rect.height+"px";
@@ -110,11 +110,11 @@ function renderOverlay(){
   paintSelection();
 }
 function toggleSelect(box){
-  const i = sel.indexOf(box);
-  if (i>=0) sel.splice(i,1); else sel.push(box);
-  if (!sel.length) { pop.hidden=true; sub.hidden=true; }
+  const i=sel.indexOf(box);
+  if(i>=0) sel.splice(i,1); else sel.push(box);
+  if(!sel.length){ pop.hidden=true; sub.hidden=true; }
   paintSelection();
-  if (sel.length) openMainFromSelection();
+  if(sel.length) openMainFromSelection();
 }
 function paintSelection(){
   overlay.querySelectorAll(".box").forEach(b=>{
@@ -143,24 +143,25 @@ function unionRect(boxes){
 }
 function selectedText(){ return sel.map(b=>b.dataset.text||"").join(""); }
 
-// ===== 팝업(메인) =====
+/* ================= 메인 팝업 ================= */
 function openMainFromSelection(){
-  const anchorRect = unionRect(sel);
+  const ar = unionRect(sel);
   const fake = document.createElement("div");
-  Object.assign(fake.style,{ position:"absolute", left:anchorRect.left+window.scrollX+"px",
-    top:anchorRect.top+window.scrollY+"px", width:anchorRect.width+"px", height:anchorRect.height+"px" });
+  Object.assign(fake.style,{ position:"absolute", left:ar.left+window.scrollX+"px",
+    top:ar.top+window.scrollY+"px", width:ar.width+"px", height:ar.height+"px" });
   document.body.appendChild(fake);
   currentAnchor=fake; currentSentence=selectedText();
   openMainPopover(currentAnchor, currentSentence).finally(()=> fake.remove());
 }
-
 async function openMainPopover(anchor, text){
   pop.hidden=false; sub.hidden=true;
+
+  // 폭: 앵커 기준(너무 작지 않게), 화면 92% 이내
   const aw = anchor.getBoundingClientRect().width, overlayW = overlay.clientWidth;
   pop.style.width = Math.min(Math.max(Math.round(aw*1.1), 420), Math.round(overlayW*0.92))+"px";
   placeMainPopover(anchor, pop, 8);
 
-  ensureSideDock();
+  ensureSideDock(); // 닫기/수정 도크(간결)
 
   rubyLine.innerHTML="…"; transLine.textContent="…";
 
@@ -174,13 +175,15 @@ async function openMainPopover(anchor, text){
         return { surf, read, lemma };
       }).filter(t=>t.surf);
 
+    // 루비 라인만 사용(중복 원문 제거)
     rubyLine.innerHTML = tokens.map(t=>{
       if (hasKanji(t.surf) && t.read){
-        return `<span class="tok" data-surf="${escapeHtml(t.surf)}" data-lemma="${escapeHtml(t.lemma)}" data-read="${escapeHtml(t.read)}"><ruby>${escapeHtml(t.surf)}<rt>${escapeHtml(t.read)}</rt></ruby></span>`;
+        return `<span class="tok" data-surf="${esc(t.surf)}" data-lemma="${esc(t.lemma)}" data-read="${esc(t.read)}"><ruby>${esc(t.surf)}<rt>${esc(t.read)}</rt></ruby></span>`;
       }
-      return `<span class="tok" data-surf="${escapeHtml(t.surf)}" data-lemma="${escapeHtml(t.lemma||t.surf)}" data-read="">${escapeHtml(t.surf)}</span>`;
+      return `<span class="tok" data-surf="${esc(t.surf)}" data-lemma="${esc(t.lemma||t.surf)}" data-read="">${esc(t.surf)}</span>`;
     }).join("");
 
+    // 토큰 클릭 → 서브팝업
     rubyLine.querySelectorAll(".tok").forEach(span=>{
       span.addEventListener("click",(ev)=>{
         ev.stopPropagation();
@@ -201,7 +204,7 @@ async function openMainPopover(anchor, text){
   }
 }
 
-// 사이드 도킹(닫기/수정)
+/* ================= 닫기/수정 도크 + 드래그 이동 ================= */
 function ensureSideDock(){
   if (pop.querySelector(".dock")) return;
   const dock = document.createElement("div");
@@ -220,31 +223,53 @@ function ensureSideDock(){
   dock.appendChild(mk("✕", ()=>{ pop.hidden=true; sub.hidden=true; sel.length=0; paintSelection(); }));
   dock.appendChild(mk("✎", ()=>{ editInput.value=currentSentence||""; editDlg.showModal(); }));
   pop.appendChild(dock);
+
+  // 드래그(상단 24px 영역에서만)
+  enableDrag(pop);
+  enableDrag(sub);
+}
+function enableDrag(panel){
+  let dragging=false, sx=0, sy=0, sl=0, st=0;
+  panel.addEventListener("pointerdown",(e)=>{
+    const r=panel.getBoundingClientRect();
+    if(e.clientY < r.top+24){
+      dragging=true; sx=e.clientX; sy=e.clientY;
+      sl=r.left+window.scrollX; st=r.top+window.scrollY;
+      panel.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    }
+  });
+  panel.addEventListener("pointermove",(e)=>{
+    if(!dragging) return;
+    const dx=e.clientX-sx, dy=e.clientY-sy;
+    panel.style.left=(sl+dx)+"px"; panel.style.top=(st+dy)+"px";
+  });
+  panel.addEventListener("pointerup",()=> dragging=false);
+  panel.addEventListener("pointercancel",()=> dragging=false);
 }
 
-// 수정 다이얼로그 → 재계산
+/* ================= 수정 다이얼로그 → 재계산 ================= */
 document.getElementById("editOk").addEventListener("click", ()=>{
   const t=editInput.value.trim(); if(!t){ editDlg.close(); return; }
   currentSentence=t; editDlg.close(); openMainPopover(currentAnchor, currentSentence);
 });
 btnEdit.addEventListener("click",(e)=>{ e.stopPropagation(); editInput.value=currentSentence||""; editDlg.showModal(); });
 
-// ===== 서브팝업(토큰) =====
+/* ================= 서브팝업(토큰) ================= */
 async function openSubForToken(tokEl, token){
   currentTokenEl = tokEl;
   sub.hidden=false;
-
   placeSubDetached(pop, tokEl, sub, 6);
 
-  // ✔ 항상 네이버 일본어사전으로
+  // 항상 네이버 일본어사전
   const headLink = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(token.lemma||token.surf)}`;
 
   sub.innerHTML = `
     <div class="sub-wrap">
       <div class="sub-row" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <a href="${headLink}" target="_blank" style="text-decoration:underline;color:#9bd1ff;">
-          ${token.read ? `<ruby>${escapeHtml(token.surf)}<rt style="font-size:11px">${escapeHtml(kataToHira(token.read))}</rt></ruby>` : escapeHtml(token.surf)}
-          <span style="opacity:.7">(${escapeHtml(token.lemma||token.surf)})</span>
+          ${token.read ? `<ruby>${esc(token.surf)}<rt style="font-size:11px">${esc(kataToHira(token.read))}</rt></ruby>` : esc(token.surf)}
+          <span style="opacity:.7">(${esc(token.lemma||token.surf)})</span>
         </a>
         <span id="tok-trans" style="opacity:.95"></span>
       </div>
@@ -252,6 +277,7 @@ async function openSubForToken(tokEl, token){
       <div id="kExplain" class="sub-row" style="margin-top:6px; opacity:.95"></div>
     </div>`;
 
+  // 단어 번역
   try{
     const tr = await translateJaKo(token.lemma||token.surf);
     const t = tr?.text || tr?.result || tr?.translation || "";
@@ -263,8 +289,6 @@ async function openSubForToken(tokEl, token){
   const row = sub.querySelector("#kanji-row");
   const panel = sub.querySelector("#kExplain");
 
-  // 가로 칩 + 색상(ANKI 우선, 그다음 일반)
-  const chips = [];
   for (const ch of new Set(ks)){
     const hasAnki = ANKI?.get?.(ch);
     const hasGen  = !!(KANJI && KANJI[ch]);
@@ -279,31 +303,31 @@ async function openSubForToken(tokEl, token){
     });
     chip.addEventListener("click",(e)=>{
       e.stopPropagation();
-      // ANKI 설명 > 일반DB 뜻 > 네이버 한자사전
       if (hasAnki){
         panel.innerHTML = `<div style="padding:6px 8px; border-left:3px solid #ffd56a; background:#2a2a2a; border-radius:6px;">
-          <strong>${escapeHtml(ch)}</strong> — ${escapeHtml(ANKI.get(ch)||"")}
+          <strong>${esc(ch)}</strong> — ${esc(ANKI.get(ch)||"")}
         </div>`;
       }else if (hasGen){
         const v = KANJI[ch];
         const gloss = (v?.ko || v?.mean || v?.korean || v?.gloss || v?.def || "").toString();
         panel.textContent = gloss ? `${ch} — ${gloss}` : `${ch}`;
       }else{
+        // 미존재: 일본어사전으로
         openNaverJaLemma(ch);
       }
     });
     row.appendChild(chip);
-    chips.push(chip);
   }
 
-  // 칩 개수에 따라 최소 너비 보정(가로 나열 시 답답함 방지)
-  if (chips.length){
-    const baseW = Math.max(260, Math.min(560, 80 + chips.length*56));
+  // 칩 개수에 따른 최소 너비 보정
+  const chipCount = new Set(ks).size;
+  if (chipCount){
+    const baseW = Math.max(260, Math.min(560, 80 + chipCount*56));
     sub.style.minWidth = baseW + "px";
   }
 }
 
-// ===== 리사이즈/스크롤 시 재배치 =====
+/* ================= 재배치/외부 클릭 ================= */
 function relayout(){
   renderOverlay();
   if(currentAnchor && !pop.hidden) placeMainPopover(currentAnchor, pop, 8);
@@ -313,15 +337,14 @@ addEventListener("resize", relayout, {passive:true});
 globalThis.visualViewport?.addEventListener("resize", relayout, {passive:true});
 addEventListener("scroll", relayout, {passive:true});
 
-// ===== 바깥 클릭 처리 =====
-// - stage 클릭: 서브만 닫기(기존)
-// - +문서 캡처 단계에서도 처리: 메인팝/루비/박스 외 클릭 시 서브만 닫기
+// 서브팝업만 닫기(팝업 외)
 stage.addEventListener("click",(e)=>{
   if (!sub.hidden && !sub.contains(e.target)) sub.hidden = true;
 });
+// 문서 캡처에서도 한 번 더(토큰 제외)
 document.addEventListener("click",(e)=>{
   if (!sub.hidden && !sub.contains(e.target)){
-    const isToken = e.target.closest?.(".tok");
-    if (!isToken) sub.hidden = true;
+    const isTok = e.target.closest?.(".tok");
+    if (!isTok) sub.hidden = true;
   }
 }, {capture:true});
