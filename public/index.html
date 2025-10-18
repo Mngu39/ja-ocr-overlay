@@ -14,31 +14,31 @@
 
     <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
-      <!-- 상단 드래그 핸들 (텍스트 버튼 제거) -->
+      <!-- 상단 드래그 핸들만 남김 (버튼은 우측 도크로 이동) -->
       <div class="pop-head">
         <div id="popDrag" class="drag-handle" title="드래그해서 이동"></div>
       </div>
 
-      <!-- 원문(루비) 한 줄만 표시 -->
+      <!-- 원문(루비)만 표시 -->
       <div id="rubyLine" class="ruby-line">…</div>
       <hr class="sep" />
       <!-- 번역 -->
       <div id="transLine" class="trans-line">…</div>
 
-      <!-- 얇고 긴 방향바(팝업 '내부'에 배치) -->
-      <button class="arrow-bar arrow-top"    data-dir="top"    title="위로 정렬"></button>
-      <button class="arrow-bar arrow-bottom" data-dir="bottom" title="아래로 정렬"></button>
-      <button class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로 정렬"></button>
-      <button class="arrow-bar arrow-right"  data-dir="right"  title="오른쪽으로 정렬"></button>
+      <!-- 얇고 긴 방향바(팝업 내부 모서리 부착) -->
+      <div class="arrow-bar arrow-top"    data-dir="top"    title="문장상자 위로 붙이기"></div>
+      <div class="arrow-bar arrow-bottom" data-dir="bottom" title="문장상자 아래로 붙이기"></div>
+      <div class="arrow-bar arrow-left"   data-dir="left"   title="문장상자 왼쪽으로 붙이기"></div>
+      <div class="arrow-bar arrow-right"  data-dir="right"  title="문장상자 오른쪽으로 붙이기"></div>
 
-      <!-- 우측 아이콘 도킹(✎/✕)는 JS에서 동적 생성 -->
+      <!-- 우측 세로 도크(아이콘 버튼: ✎/✕) — JS가 채움 -->
+      <div id="sideDock" class="side-dock"></div>
     </div>
 
     <!-- 수정 다이얼로그 -->
     <dialog id="editDlg">
       <form method="dialog" class="edit-form">
-        <label>원문 수정</label>
-        <textarea id="editInput" rows="4"></textarea>
+        <textarea id="editInput" rows="4" placeholder="원문을 수정하세요"></textarea>
         <menu>
           <button value="cancel" class="btn ghost">취소</button>
           <button id="editOk" value="ok" class="btn">저장</button>
@@ -50,7 +50,7 @@
     <div id="sub" class="subpop" hidden>
       <div class="sub-head">
         <div id="subDrag" class="drag-handle small" title="드래그해서 이동"></div>
-        <span id="subTitle"></span>
+        <div id="subTitle"></div>
       </div>
       <div id="subBody"></div>
     </div>
