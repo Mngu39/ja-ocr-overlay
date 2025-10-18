@@ -1,4 +1,4 @@
-// 안정 동작판 + 지정 수정사항 반영
+// 안정 동작판 + (1)화살표 스냅/비활성, (2)우측 아이콘 도킹, (3)서브팝업 위치/가독성, (5)한자DB 경로 확정
 import { getImageById, gcvOCR, getFurigana, translateJaKo, openNaverJaLemma, openNaverHanja } from "./api.js";
 import { placeMainPopover, placeSubDetached } from "./place.js";
 
@@ -12,8 +12,6 @@ const rubyLine  = document.getElementById("rubyLine");
 const transLine = document.getElementById("transLine");
 const editDlg   = document.getElementById("editDlg");
 const editInput = document.getElementById("editInput");
-const btnEdit   = document.getElementById("btnEdit");
-const btnClose  = document.getElementById("btnClose");
 const popDrag   = document.getElementById("popDrag");
 
 const sub       = document.getElementById("sub");
@@ -23,11 +21,11 @@ const subDrag   = document.getElementById("subDrag");
 
 // 선택 관련
 let annos = [];
-let selected = [];    // [{el,text}]
-let currentAnchor = null;  // 항상 "첫번째" 박스
+let selected = [];               // [{el,text}]
+let currentAnchor = null;        // 항상 "첫번째" 박스
 let currentTokenEl = null;
 
-// ===== Kanji DBs =====
+// ===== Kanji DBs (경로: /public/...) =====
 let KANJI = null;  // 일반: { '漢': { '음': '...', '훈': '...', ... }, ... }
 let ANKI  = null;  // Anki:  { '漢': { mean:'...', explain:'...' }, ... }
 async function loadDBs(){
@@ -36,7 +34,7 @@ async function loadDBs(){
       fetch("./kanji_ko_attr_irreg.min.json").then(r=>r.ok?r.json():null),
       fetch("./일본어_한자_암기박사/deck.json").then(r=>r.ok?r.json():null)
     ]);
-    KANJI = j1.status==="fulfilled" ? j1.value : {};
+    KANJI = j1.status==="fulfilled" ? (j1.value||{}) : {};
     // CrowdAnki → map
     if (j2.status==="fulfilled" && j2.value){
       const map = {};
@@ -66,6 +64,7 @@ const DB_READY = loadDBs();
 const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 const hasKanji   = s => /[\u3400-\u9FFF]/.test(s||"");
 const kataToHira = s => (s||"").replace(/[\u30a1-\u30f6]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
+const vb = () => (globalThis.visualViewport || { width:innerWidth, height:innerHeight, offsetTop:scrollY, offsetLeft:scrollX });
 
 // 월 1,000건 로컬 카운트
 function quotaKey(){ const d=new Date(); return `gcv_quota_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}`; }
@@ -90,8 +89,7 @@ function rollbackQuota(k){ const n=+(localStorage.getItem(k)||1); localStorage.s
       }catch(e){ rollbackQuota(q.key); console.error(e); hint.textContent="OCR 오류"; }
     };
     imgEl.onerror = ()=>{ hint.textContent="이미지를 불러오지 못했습니다"; };
-    // 캐시버스터(사파리 안전)
-    imgEl.src = (await getImageById(id)) + `&t=${Date.now()}`;
+    imgEl.src = (await getImageById(id)) + `&t=${Date.now()}`; // 캐시버스터
   }catch(e){ hint.textContent=e.message; }
 })();
 
@@ -128,34 +126,29 @@ function toggleSelect(box){
   }
   renumber();
   if (selected.length){
-    // 기준 앵커는 항상 "첫 번째" 선택 박스
-    currentAnchor = selected[0].el;
+    currentAnchor = selected[0].el;  // 첫 번째 박스를 기준 앵커로 고정
     openMainFromSelection();
   }else{
     pop.hidden=true; sub.hidden=true;
   }
 }
-function renumber(){
-  selected.forEach((it,i)=> it.el.querySelector(".ord")?.textContent = i+1);
-}
+function renumber(){ selected.forEach((it,i)=> it.el.querySelector(".ord")?.textContent = i+1); }
 function selectedText(){ return selected.map(x=>x.text).join(""); }
 
 // ===== Main Popover =====
-function openMainFromSelection(){
-  openMainPopover(currentAnchor, selectedText());
-}
+function openMainFromSelection(){ openMainPopover(currentAnchor, selectedText()); }
+
 async function openMainPopover(anchor, text){
   pop.hidden=false; sub.hidden=true;
+  ensureSideDock(); // ✎/✕ 아이콘 도킹 보장
 
   // 앵커 너비 기반 폭
   const aw = anchor.getBoundingClientRect().width, overlayW = overlay.clientWidth;
   pop.style.width = Math.min(Math.max(Math.round(aw*1.1), 420), Math.round(overlayW*0.92))+"px";
   placeMainPopover(anchor, pop, 8);
 
-  // 루비/번역 초기화
   rubyLine.innerHTML="…"; transLine.textContent="…";
 
-  // 실요청
   try{
     const [rubi, tr] = await Promise.all([ getFurigana(text), translateJaKo(text) ]);
 
@@ -199,59 +192,86 @@ async function openMainPopover(anchor, text){
   }
 }
 
-// == 방향바 (얇고 긴 바) ==
+// === 우측 아이콘 도킹(✎/✕) — 텍스트 버튼 제거 대체 ===
+function ensureSideDock(){
+  if (pop.querySelector(".side-dock")) return;
+  const dock = document.createElement("div");
+  dock.className = "side-dock";
+  const mk = (label, on)=>{ const b=document.createElement("button"); b.className="icon"; b.textContent=label; b.onclick=(e)=>{ e.stopPropagation(); on(); }; return b; };
+  // ✎ 수정
+  dock.appendChild(mk("✎", ()=>{ editInput.value = selectedText() || ""; editDlg.showModal(); }));
+  // ✕ 닫기
+  dock.appendChild(mk("✕", ()=>{
+    pop.hidden=true; sub.hidden=true;
+    selected.forEach(it=>{ it.el.classList.remove("selected"); it.el.querySelector(".ord")?.remove(); });
+    selected = [];
+  }));
+  pop.appendChild(dock);
+}
+document.getElementById("editOk").addEventListener("click", ()=>{
+  const t = editInput.value.trim(); if(!t){ editDlg.close(); return; }
+  editDlg.close(); openMainPopover(currentAnchor, t);
+});
+
+// === 방향바: “미세이동” 제거 → 즉시 상/하/좌/우 스냅 ===
 const bars = Array.from(pop.querySelectorAll(".arrow-bar"));
 bars.forEach(b=>{
   b.addEventListener("click",(e)=>{
     e.stopPropagation();
     if (b.classList.contains("disabled")) return;
-    nudgeTo(b.dataset.dir);
+    snapTo(b.dataset.dir);
   });
 });
-function vb(){ return (globalThis.visualViewport || { width:innerWidth, height:innerHeight, offsetTop:scrollY, offsetLeft:scrollX }); }
-function nudgeTo(dir){
-  if(!currentAnchor) return;
-  // 기본 위치에서 시작 후 미세이동
-  placeMainPopover(currentAnchor, pop, 8);
-  const step = 24;
-  const r = pop.getBoundingClientRect();
 
-  const dx = dir==="left" ? -step : dir==="right" ? step : 0;
-  const dy = dir==="top"  ? -step : dir==="bottom"? step : 0;
+// 후보 배치 좌표 계산(해당 방향으로 ‘한 번에’)
+function computeSnapRect(dir){
+  if(!currentAnchor) return null;
+  const rA = currentAnchor.getBoundingClientRect();
+  const rP = pop.getBoundingClientRect();
+  const gap = 8;
+  let x,y;
+  if(dir==="top"){
+    x = rA.left + (rA.width - rP.width)/2;
+    y = rA.top - rP.height - gap;
+  }else if(dir==="bottom"){
+    x = rA.left + (rA.width - rP.width)/2;
+    y = rA.bottom + gap;
+  }else if(dir==="left"){
+    x = rA.left - rP.width - gap;
+    y = rA.top + (rA.height - rP.height)/2;
+  }else if(dir==="right"){
+    x = rA.right + gap;
+    y = rA.top + (rA.height - rP.height)/2;
+  }
+  return { left:x, top:y, right:x + rP.width, bottom:y + rP.height, width:rP.width, height:rP.height };
+}
 
-  pop.style.left = (r.left + dx + window.scrollX) + "px";
-  pop.style.top  = (r.top  + dy + window.scrollY)  + "px";
-
-  // 서브팝업도 재배치
+function snapTo(dir){
+  const rect = computeSnapRect(dir); if(!rect) return;
+  pop.style.left = (rect.left + window.scrollX) + "px";
+  pop.style.top  = (rect.top  + window.scrollY) + "px";
   if (currentTokenEl && !sub.hidden) placeSubDetached(pop, currentTokenEl, sub, 8);
   updateArrowEnablement();
 }
+
+// “그 방향으로 스냅했을 때” 화살표가 눌릴 수 없으면 비활성(X 패턴)
 function updateArrowEnablement(){
-  const r = pop.getBoundingClientRect(), v = vb();
-  const thick = 8, margin = 8;
-
-  const canTop    = (r.top - margin)    >= v.offsetTop;
-  const canBottom = (r.bottom + margin) <= (v.offsetTop + v.height);
-  const canLeft   = (r.left - margin)   >= v.offsetLeft;
-  const canRight  = (r.right + margin)  <= (v.offsetLeft + v.width);
-
-  pop.querySelector(".arrow-top")   .classList.toggle("disabled", !canTop);
-  pop.querySelector(".arrow-bottom").classList.toggle("disabled", !canBottom);
-  pop.querySelector(".arrow-left")  .classList.toggle("disabled", !canLeft);
-  pop.querySelector(".arrow-right") .classList.toggle("disabled", !canRight);
+  const v = vb();
+  const margin = 4; // 바 자체 두께 고려 소폭 여유
+  const test = (dir)=>{
+    const r = computeSnapRect(dir); if(!r) return false;
+    // 해당 방향 바의 좌표가 뷰포트 안에 최소한 들어오는지 판단
+    if(dir==="top")    return (r.top + margin)    >= v.offsetTop;
+    if(dir==="bottom") return (r.bottom - margin) <= (v.offsetTop + v.height);
+    if(dir==="left")   return (r.left + margin)   >= v.offsetLeft;
+    if(dir==="right")  return (r.right - margin)  <= (v.offsetLeft + v.width);
+    return false;
+  };
+  pop.querySelector(".arrow-top")   .classList.toggle("disabled", !test("top"));
+  pop.querySelector(".arrow-bottom").classList.toggle("disabled", !test("bottom"));
+  pop.querySelector(".arrow-left")  .classList.toggle("disabled", !test("left"));
+  pop.querySelector(".arrow-right") .classList.toggle("disabled", !test("right"));
 }
-
-// 닫기/수정
-btnClose.addEventListener("click", ()=>{
-  pop.hidden = true; sub.hidden = true;
-  selected.forEach(it=>{ it.el.classList.remove("selected"); it.el.querySelector(".ord")?.remove(); });
-  selected = [];
-});
-btnEdit.addEventListener("click",(e)=>{ e.stopPropagation(); editInput.value = selectedText() || ""; editDlg.showModal(); });
-document.getElementById("editOk").addEventListener("click", ()=>{
-  const t = editInput.value.trim(); if(!t){ editDlg.close(); return; }
-  editDlg.close(); openMainPopover(currentAnchor, t);
-});
 
 // 드래그(메인/서브)
 makeDraggable(pop, popDrag);
@@ -284,11 +304,14 @@ async function openSubForToken(tokEl, tok){
   const reading = kataToHira(tok.reading||"");
   const lemma   = tok.lemma||surface;
 
-  // 헤더(링크 + lemma)
+  // 헤더(링크 + lemma) — 가독성 강화
   const url = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(lemma||surface)}`;
-  subTitle.innerHTML = `<a href="${url}" target="_blank">${hasKanji(surface)&&reading
-    ? `<ruby>${escapeHtml(surface)}<rt style="font-size:11px">${escapeHtml(reading)}</rt></ruby>`
-    : escapeHtml(surface)}</a><span class="lemma">(${escapeHtml(lemma)})</span>`;
+  subTitle.innerHTML =
+    `<a href="${url}" target="_blank" rel="noreferrer noopener">${
+       hasKanji(surface)&&reading
+       ? `<ruby>${escapeHtml(surface)}<rt style="font-size:11px">${escapeHtml(reading)}</rt></ruby>`
+       : escapeHtml(surface)
+     }</a><span class="lemma">(${escapeHtml(lemma)})</span>`;
 
   // 본문: 번역 + 한자박스
   subBody.innerHTML = `
@@ -300,9 +323,11 @@ async function openSubForToken(tokEl, tok){
     const r = await translateJaKo(lemma||surface);
     const txt = r?.text || r?.result || r?.translation || "";
     document.getElementById("subTrans").textContent = txt || "(번역 없음)";
-  }catch{ document.getElementById("subTrans").textContent = "(번역 실패)"; }
+  }catch{
+    document.getElementById("subTrans").textContent = "(번역 실패)";
+  }
 
-  // Kanji box
+  // 한자 박스(가로 나열) — ANKI(초록) > 일반DB(남색) > 없음(회색)
   await DB_READY;
   const kwrap = document.getElementById("kwrap");
   const uniq = Array.from(new Set(Array.from(surface).filter(ch=>hasKanji(ch))));
@@ -310,10 +335,10 @@ async function openSubForToken(tokEl, tok){
     const anki = ANKI?.[ch];
     const db   = KANJI?.[ch];
     const div  = document.createElement("div");
-    div.className = "k " + (anki ? "anki" : "db");
-    // 일반 DB는 (음/훈) 중 있는 것만 짧게 노출
-    const gloss = anki ? (anki.mean||"") :
-       db ? [db["음"], db["훈"]].filter(Boolean).join(" / ") : "";
+    div.className = "k " + (anki ? "anki" : (db ? "db" : ""));
+    const gloss = anki ? (anki.mean||"")
+                       : db ? [db["음"], db["훈"]].filter(Boolean).join(" / ")
+                            : "";
     div.innerHTML = `${escapeHtml(ch)}${gloss?`<small>${escapeHtml(gloss)}</small>`:""}`;
     div.addEventListener("click",(ev)=>{
       ev.stopPropagation();
@@ -321,17 +346,18 @@ async function openSubForToken(tokEl, tok){
         let ex = subBody.querySelector(".k-explain");
         if(!ex){ ex=document.createElement("div"); ex.className="k-explain sub-row"; subBody.appendChild(ex); }
         ex.textContent = anki.explain || "(설명 없음)";
+      }else if (db){
+        // 간단 훈음 토스트(경량) — 필요시 네이버 이동으로 대체 가능
+        alert(`${ch} : ${gloss || "정보 없음"}`);
       }else{
-        if (db){ alert(`${ch} : ${gloss}`); }
-        else{ openNaverHanja(ch); }
+        openNaverHanja(ch);
       }
     });
     kwrap.appendChild(div);
   }
 
-  // F20: 한자 박스 수에 맞춰 서브 폭 조정(최대 86vw)
+  // 한자 수에 맞춰 서브 폭 조정(F20)
   requestAnimationFrame(()=>{
-    // 내용 폭 추정
     const need = Math.min(Math.max(kwrap.scrollWidth + 24, 260), Math.floor(window.innerWidth*0.86));
     sub.style.width = need + "px";
     sub.hidden=false;
