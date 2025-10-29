@@ -1,15 +1,35 @@
 :root{
-  --bg:#0b0b0c; --ink:#e8e8ea; --muted:#a9abb3; --accent:#4da3ff;
-  --box:#4da3ff; --box-active:#00d4ff; --pop:#141417; --border:#2a2a31;
+  --bg:#0b0b0c;
+  --ink:#e8e8ea;
+  --muted:#a9abb3;
+  --accent:#4da3ff;
+
+  --box:#4da3ff;
+  --box-active:#00d4ff;
+
+  --pop:#141417;
+  --border:#2a2a31;
+
+  --dock-bg:#2b2f3a;
+  --dock-fg:#fff;
 }
 
 *{ box-sizing:border-box; }
 html,body{
-  margin:0; height:100%;
+  margin:0;
+  height:100%;
   background:var(--bg); color:var(--ink);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans JP","Malgun Gothic",sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
+    "Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans JP","Malgun Gothic",sans-serif;
 }
-#stage{ position:relative; width:100%; min-height:100vh; display:grid; place-items:center; padding:10px; }
+#stage{
+  position:relative;
+  width:100%;
+  min-height:100vh;
+  display:grid;
+  place-items:center;
+  padding:10px;
+}
 
 #img{
   max-width:100%;
@@ -32,7 +52,7 @@ html,body{
   font-size:14px;
 }
 
-/* 인식된 문장 박스 */
+/* ====== 인식 박스 ====== */
 .box{
   position:absolute;
   border:2px solid var(--box);
@@ -47,15 +67,17 @@ html,body{
 }
 .box .ord{
   position:absolute;
-  right:4px; top:2px;
-  background:#50c8ff; color:#002331;
+  right:4px;
+  top:2px;
+  background:#50c8ff;
+  color:#002331;
   font-weight:700;
   padding:0 6px;
   border-radius:10px;
   font-size:12px;
 }
 
-/* 메인 팝업 */
+/* ====== 메인 팝업 ====== */
 .popover{
   position:absolute;
   max-width:min(92vw, 900px);
@@ -63,74 +85,64 @@ html,body{
   color:var(--ink);
   border:1px solid var(--border);
   border-radius:14px;
-  padding:10px 12px 12px;
+  padding:12px;
   box-shadow:0 12px 40px rgba(0,0,0,.5);
   z-index:50;
 }
-.pop-head{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:10px;
-  margin:0 0 6px;
-  position:relative;
-}
-.drag-handle{
-  width:140px;
-  height:6px;
-  border-radius:4px;
-  background:#2a2f3b;
-  opacity:.7;
-}
-.pop-actions{
-  /* 팝업 안에 '수정','닫기' 텍스트 버튼은 이제 숨긴다 (사이드 독만 쓸 거라서) */
-  display:none;
-}
 
-/* 사이드 독(닫기/수정 아이콘 버튼 세로배치) */
-.dock{
+/* 얇은 방향바 (상하좌우 붙이는 이동버튼) */
+.arrow-bar{
   position:absolute;
-  top:8px;
-  /* right는 JS에서 -44px 또는 8px 중 하나로 바꿔 끼울 거라 기본값은 일단 8px */
-  right:8px;
-  width:36px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  z-index:200; /* 팝업보다 위에 */
-}
-.dock-btn{
-  width:36px;
-  height:36px;
-  border:0;
-  border-radius:18px;
-  background:#2e2e2e;
-  color:#fff;
-  font-size:16px;
-  line-height:36px;
-  text-align:center;
-  padding:0;
+  opacity:.55;
+  background:#2b2f3a;
+  border-radius:6px;
   cursor:pointer;
-  box-shadow:0 8px 20px rgba(0,0,0,.6);
+}
+.arrow-bar:hover{ opacity:.85; }
+
+.arrow-bar.disabled{
+  opacity:.25;
+  cursor:not-allowed;
+  background:
+    repeating-linear-gradient(45deg,#333,#333 6px,#3b3b3b 6px,#3b3b3b 12px);
 }
 
-/* 본문 텍스트들 */
-.sep{
-  border:none;
-  border-top:1px solid var(--border);
-  margin:8px 0;
+/* 위/아래 막대는 가로로 길게, 얇게 */
+.arrow-top,
+.arrow-bottom{
+  height:8px;
+  left:10%;
+  right:10%;
 }
+.arrow-top{ top:-12px; }
+.arrow-bottom{ bottom:-12px; }
+
+/* 좌/우 막대는 세로로 길게, 얇게 */
+.arrow-left,
+.arrow-right{
+  width:8px;
+  top:10%;
+  bottom:10%;
+}
+.arrow-left{ left:-12px; }
+.arrow-right{ right:-12px; }
+
+/* 루비/원문 줄 */
 .ruby-line{
-  line-height:1.9;
+  line-height:1.85;
   font-size:18px;
   color:#cfd4ff;
   word-break:break-word;
 }
-.ruby-line ruby{ ruby-position:over; ruby-align:center; }
+.ruby-line ruby{
+  ruby-position:over;
+  ruby-align:center;
+}
 .ruby-line rt{
   font-size:12px;
   color:#9fb3ff;
 }
+
 .tok{
   padding:2px 4px;
   border-radius:6px;
@@ -139,6 +151,15 @@ html,body{
   background:#1f2433;
   cursor:pointer;
 }
+
+/* 구분선 */
+.sep{
+  border:none;
+  border-top:1px solid var(--border);
+  margin:8px 0;
+}
+
+/* 번역 줄 */
 .trans-line{
   font-size:18px;
   line-height:1.7;
@@ -146,10 +167,38 @@ html,body{
   word-break:break-word;
 }
 
-/* 화살표 바(예전 컨셉). 지금은 사용 안 하니 안 보이게 */
-.arrow-bar{ display:none !important; }
+/* 팝업 우측 dock (✕ / ✎) */
+.dock{
+  position:absolute;
+  top:8px;
+  width:36px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  z-index:80;
+}
+.dock-left{ left:-44px; }
+.dock-right{ right:-44px; }
 
-/* 서브 팝업 */
+.dock-btn{
+  width:36px;
+  height:36px;
+  border-radius:18px;
+  background:var(--dock-bg);
+  color:var(--dock-fg);
+  border:1px solid #3a3f4a;
+  font-size:14px;
+  font-weight:600;
+  line-height:36px;
+  text-align:center;
+  cursor:pointer;
+  user-select:none;
+}
+.dock-btn:active{
+  filter:brightness(1.2);
+}
+
+/* ====== 서브 팝업 ====== */
 .subpop{
   position:absolute;
   max-width:86vw;
@@ -157,118 +206,110 @@ html,body{
   color:var(--ink);
   border:1px solid var(--border);
   border-radius:12px;
-  padding:10px 12px;
-  box-shadow:0 8px 30px rgba(0,0,0,.5);
+  padding:10px 12px 12px;
   z-index:60;
-  font-size:14px;
-  line-height:1.55;
-}
-
-/* 서브팝업 상단부 */
-.sub-head{
-  position:relative;
-  display:flex;
-  flex-wrap:wrap;
-  align-items:flex-start;
-  row-gap:4px;
-  column-gap:8px;
-  margin-bottom:6px;
-  /* subDrag가 절대배치로 덮일 예정 */
-}
-#subDrag{
-  position:absolute;
-  left:0; right:0; top:0;
-  height:20px;
-  cursor:move;
-  background:transparent !important; /* 튀는 회색 막대(정체불명의 선) 제거 */
-  border-radius:0;
-  opacity:1;
-}
-#subTitle{
-  position:relative;
-  padding-top:20px; /* subDrag 가 덮는 영역 피해서 텍스트 안 가리게 */
-  display:flex;
-  flex-wrap:wrap;
-  align-items:flex-start;
-  row-gap:4px;
-  column-gap:8px;
+  box-shadow:0 8px 30px rgba(0,0,0,.5);
   font-size:14px;
   line-height:1.5;
 }
-#subTitle a{
-  color:#9bd1ff;
-  text-decoration:underline;
-  font-weight:700;
+
+/* 헤더 한 줄: 표면형(루비) (lemma) 번역 */
+.sub-head-row{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  row-gap:4px;
+  column-gap:8px;
+  margin-bottom:8px;
+  font-size:15px;
+  line-height:1.5;
+  color:#fff;
+  word-break:break-word;
 }
-#subTitle ruby rt{
+.sub-head-row a.surf{
+  color:#fff;
+  text-decoration:none;
+  font-weight:700;
+  font-size:16px;
+  line-height:1.5;
+}
+.sub-head-row a.surf ruby rt{
   font-size:11px;
   line-height:1.2;
   color:#9fb3ff;
 }
-#subTitle .lemma{
-  opacity:.8;
-  margin-left:4px;
-  font-weight:500;
-  color:#cfd4ff;
+.sub-head-row .lemma{
+  opacity:.7;
+  font-size:14px;
 }
-#subTitle .tok-trans{
-  color:#e8e8ea;
-  opacity:.95;
+.sub-head-row .meaning{
+  color:#e7f6ff;
+  font-size:15px;
   font-weight:500;
 }
 
-/* 서브팝업 본문 (한자 박스들) */
-#subBody{
-  font-size:14px;
-  line-height:1.5;
-}
+/* 한자 박스들 */
 .kwrap{
   display:flex;
   flex-wrap:wrap;
-  gap:6px;
+  gap:8px;
+  margin-bottom:8px;
 }
-.k{
+
+/* 개별 한자 박스 */
+.kbox{
+  background:#222a39;
+  color:#e8eefc;
   border:1px solid #2a2f3b;
-  padding:4px 8px;
-  border-radius:8px;
+  border-radius:10px;
+  padding:6px 8px;
   font-weight:700;
   cursor:pointer;
-  max-width:120px;
+  line-height:1.4;
   word-break:break-word;
-  line-height:1.4;
 }
-.k small{
-  display:block;
-  font-weight:600;
-  opacity:.85;
-  font-size:12px;
-  line-height:1.4;
-}
-.k.anki{
+.kbox.anki{
   background:#2d3b29;
   color:#e8f6e8;
 }
-.k.db{
-  background:#222a39;
-  color:#e8eefc;
+.kbox-head{
+  font-size:16px;
+  font-weight:700;
+  margin-bottom:4px;
 }
-.k.none{
-  background:#2a2a2a;
-  color:#fff;
-}
-
-/* 한자 설명 영역 */
-.k-explain{
-  flex-basis:100%;
+.kbox-body{
   font-size:13px;
-  line-height:1.4;
+  font-weight:600;
+  opacity:.9;
+}
+.k-explain{
+  background:#1a1f29;
+  border:1px solid #2a2f3b;
+  border-radius:8px;
+  padding:8px;
+  font-size:13px;
+  line-height:1.5;
   opacity:.95;
-  margin-top:6px;
-  color:#e8e8ea;
   word-break:break-word;
+  white-space:normal;
+  margin-bottom:8px;
 }
 
-/* dialog / 버튼 기본 */
+/* 서브 닫기 버튼 줄 */
+.sub-close-row{
+  display:flex;
+  justify-content:flex-end;
+}
+.sub-close-btn{
+  background:transparent;
+  color:#cfd4ff;
+  border:1px solid #3a3f4a;
+  background-color:#1f2330;
+  border-radius:10px;
+  font-weight:600;
+}
+
+/* 기본 버튼들 (다이얼로그 etc) */
 .btn{
   background:var(--accent);
   color:#021323;
@@ -288,6 +329,7 @@ html,body{
   font-size:12px;
 }
 
+/* dialog for 편집 */
 dialog{
   border:none;
   border-radius:12px;
@@ -317,7 +359,7 @@ menu{
   padding:0;
 }
 
-/* 선택 방지 */
+/* 선택 방지 (iOS 더블탭 드래그 방지) */
 img, .box, .popover, .subpop{
   -webkit-user-select:none;
   user-select:none;
