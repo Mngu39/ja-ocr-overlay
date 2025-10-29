@@ -1,7 +1,6 @@
-// 메인 팝업 기본 배치:
-// anchor(문장박스) 주변 위/아래 중 더 여유 있는 쪽에 붙이고
-// 가로는 anchor 중앙 맞추되 화면 밖으로는 최소화
-export function placeMainPopover(anchor, pop, gap = 8){
+// 팝업 위치 계산 유틸
+
+export function placeMainPopover(anchor, pop, gap=8){
   const vb = (globalThis.visualViewport || {
     width: innerWidth,
     height: innerHeight,
@@ -9,31 +8,31 @@ export function placeMainPopover(anchor, pop, gap = 8){
     offsetLeft: scrollX
   });
 
-  const ar = anchor.getBoundingClientRect();
-  const pr = pop.getBoundingClientRect();
+  const r = anchor.getBoundingClientRect();
+  const p = pop.getBoundingClientRect();
 
-  const topSpace    = ar.top    - vb.offsetTop;
-  const bottomSpace = (vb.offsetTop + vb.height) - ar.bottom;
-  const preferTop   = topSpace > bottomSpace;
+  const topSpace = r.top - vb.offsetTop;
+  const bottomSpace = (vb.offsetTop + vb.height) - r.bottom;
+  const preferTop = topSpace > bottomSpace;
 
-  let x = ar.left + (ar.width - pr.width)/2;
+  // 기본 x: 앵커 가운데에 맞추되 화면 밖 안 나가게
+  let x = r.left + (r.width - p.width) / 2;
   x = Math.max(
-    vb.offsetLeft + 8,
-    Math.min(x, vb.offsetLeft + vb.width - pr.width - 8)
+    8,
+    Math.min(x, vb.offsetLeft + vb.width - p.width - 8)
   );
 
+  // 기본 y: 앵커 위/아래 중 더 여유 있는 곳
   let y;
   if (preferTop){
-    y = ar.top - pr.height - gap;
+    y = r.top - p.height - gap;
     if (y < vb.offsetTop + 8){
-      // fallback bottom
-      y = ar.bottom + gap;
+      y = r.bottom + gap;
     }
-  }else{
-    y = ar.bottom + gap;
-    if (y + pr.height > vb.offsetTop + vb.height - 8){
-      // fallback top
-      y = ar.top - pr.height - gap;
+  } else {
+    y = r.bottom + gap;
+    if (y + p.height > vb.offsetTop + vb.height - 8){
+      y = r.top - p.height - gap;
     }
   }
 
@@ -43,9 +42,9 @@ export function placeMainPopover(anchor, pop, gap = 8){
   });
 }
 
-// 서브팝업은 메인팝업 외측 하단(또는 상단) 근처에 “붙여서” 띄우되
-// 화면 밖으로 너무 튀어나가면 살짝 뒤집거나 붙여서 조정
-export function placeSubDetached(pop, tokenEl, sub, gap = 8){
+export function placeSubDetached(pop, tokenEl, sub, gap=8){
+  // 서브팝업은 기본적으로 "메인팝업의 우하단 쪽에 딱 붙어" 있어야 함
+  // 단, 화면을 넘치면 위로 올리거나 왼쪽으로 붙임
   const vb = (globalThis.visualViewport || {
     width: innerWidth,
     height: innerHeight,
@@ -56,18 +55,23 @@ export function placeSubDetached(pop, tokenEl, sub, gap = 8){
   const pr = pop.getBoundingClientRect();
   const sr = sub.getBoundingClientRect();
 
-  // 기본: 메인팝업의 바깥 우하단
-  let x = pr.right + gap;
-  let y = pr.bottom + gap;
-
-  // 오른쪽이 잘리면 팝업의 오른쪽 경계에 맞추되 안쪽으로
-  if (x + sr.width > vb.offsetLeft + vb.width - 8){
-    x = pr.right - sr.width;
+  // 기본: 메인팝업의 오른쪽 아래 모서리 바로 아래쪽
+  let x = pr.right - sr.width;
+  if (x < vb.offsetLeft + 8){
+    // 너무 왼쪽으로 튀면 그냥 팝업 왼쪽으로 붙여
+    x = pr.left;
   }
 
-  // 아래로 잘리면 메인팝업 위쪽으로 올림
+  let y = pr.bottom + gap;
+
+  // 만약 아래로 내리면 화면에서 바닥 뚫는다면 위로 올려
   if (y + sr.height > vb.offsetTop + vb.height - 8){
     y = pr.top - sr.height - gap;
+  }
+
+  // 위로 올렸는데도 너무 위로 가면 (거의 안 나올 상황이지만) 위쪽 최소치 보정
+  if (y < vb.offsetTop + 8){
+    y = vb.offsetTop + 8;
   }
 
   Object.assign(sub.style, {
