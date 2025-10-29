@@ -4,7 +4,7 @@ import {
   getFurigana,
   translateJaKo,
   openNaverJaLemma,
-  openNaverHanja // 남겨두지만 이제 안 씀
+  openNaverHanja
 } from "./api.js";
 import { placeMainPopover } from "./place.js";
 
@@ -30,7 +30,7 @@ const kExplain  = document.getElementById("kExplain");
 let annos = [];            // [{text, polygon:[[x,y]..]}, ...]
 let selected = [];         // [{el,text}]
 let currentAnchor = null;  // 항상 첫 번째 선택 박스
-let currentDir = null;     // pop이 anchor 기준 붙어있는 방향(top/bottom/left/right)
+let currentDir = null;     // pop이 anchor 기준 어디에 붙어있는지(top/bottom/left/right)
 let currentTokenObj = null;
 
 // ===== Kanji DBs =====
@@ -91,12 +91,6 @@ const kataToHira = s =>
 function nl2br(s){
   return escapeHtml(s).replace(/\n/g,"<br>");
 }
-function oneLine(s){
-  // 박스 안에 들어가는 짧은 gloss는 줄바꿈 없이 한 줄만
-  return (s||"")
-    .replace(/\s+/g," ")
-    .trim();
-}
 
 // ===== 사용량 카운트 =====
 function quotaKey(){
@@ -115,7 +109,7 @@ function rollbackQuota(k){
   localStorage.setItem(k,Math.max(0,n-1));
 }
 
-// ===== 이미지 로드 → OCR (절대진리, 절대 수정 안 함) =====
+// ===== 이미지 로드 → OCR (절대진리 부분 변경 없음) =====
 (async function bootstrap(){
   try{
     const qs=new URLSearchParams(location.search);
@@ -148,7 +142,7 @@ function rollbackQuota(k){
       hint.textContent="이미지를 불러오지 못했습니다";
     };
 
-    // 절대진리: 이 줄은 절대 바꾸지 않는다
+    // 절대 건드리지 않는 라인
     imgEl.src = await getImageById(id);
 
   }catch(e){
@@ -239,7 +233,7 @@ function openMainFromSelection(){
   openMainPopover(currentAnchor, selectedText());
 }
 
-// 도킹 버튼(✕/✎)을 팝업 옆에 붙이는 유틸
+// dock: 팝업 옆에 ✕ / ✎
 function ensureDock(){
   let dock = pop.querySelector(".dock");
   if(!dock){
@@ -278,7 +272,7 @@ function ensureDock(){
     pop.appendChild(dock);
   }
 
-  // dock이 화면 오른쪽으로 나갈 것 같으면 왼쪽으로 붙이기
+  // dock이 화면을 벗어나면 반대편으로
   const vb=getVB();
   const pr=pop.getBoundingClientRect();
   const dockW=44;
@@ -358,7 +352,7 @@ async function openMainPopover(anchor, text){
     Math.round(overlayW*0.92)
   )+"px";
 
-  // 일단 기본 위치
+  // 일단 기본 위치로 한 번 놓고
   placeMainPopover(anchor, pop, 8);
 
   // 1차 표시: fallback 토큰 / 번역 placeholder
@@ -418,7 +412,7 @@ function getVB(){
   });
 }
 
-// anchor 기준으로 pop을 dir("top"/"bottom"/"left"/"right") 방향에 정렬할 좌표 계산
+// anchor 기준으로 pop을 특정 방향(dir)에 "딱 붙여서" 둘 좌표 계산
 function calcPosForDir(dir){
   if(!currentAnchor) return null;
   const gap=8;
@@ -450,7 +444,7 @@ function calcPosForDir(dir){
   };
 }
 
-// dir 위치가 화면 안에 들어가는지 검사 → 화살표 활성/비활성에 사용
+// dir 위치가 화면 안에 들어가는지 검사
 function canPlaceDir(dir){
   const vb=getVB();
   const box=calcPosForDir(dir);
@@ -486,7 +480,7 @@ function applyDir(dir){
   currentDir=dir;
 
   ensureDock();
-  placeSubNearMain(); // 서브팝업 열려 있으면 재배치
+  placeSubNearMain(); // 서브팝업이 열려 있다면 갱신
   updateArrowEnablement();
 }
 
@@ -515,7 +509,7 @@ function updateArrowEnablement(){
   }
 }
 
-// 화살표 클릭 → 곧바로 해당 방향으로 정렬
+// 화살표 클릭
 Array.from(pop.querySelectorAll(".arrow-bar")).forEach(bar=>{
   bar.addEventListener("click",e=>{
     e.stopPropagation();
@@ -552,9 +546,9 @@ async function openSubForToken(tok){
   kExplain.style.display="none";
   kExplain.innerHTML="";
 
-  // 일단 바로 보이게
+  // 일단 서브팝업을 바로 보이게 해서 "안 떠" 문제 제거
   sub.hidden = false;
-  placeSubNearMain();
+  placeSubNearMain(); // 먼저 자리 잡고 시작
 
   // 단어 번역 (lemma 기준)
   try{
@@ -565,84 +559,65 @@ async function openSubForToken(tok){
       mEl.textContent = txt || "";
     }
   }catch{
-    /* 번역 실패해도 그냥 빈칸 */
+    /* ignore - 번역 실패해도 그냥 빈칸 */
   }
 
-  // 한자 박스들
+  // 한자 박스
   await DB_READY;
   const uniqKanji = Array.from(new Set(Array.from(surface).filter(ch=>hasKanji(ch))));
 
-  // 박스 최소 너비 계산: 가장 긴 gloss 기준
-  // glossText는 "한 줄로" 만들 예정(oneLine)
+  // 박스 공통 최소폭 계산 (가장 긴 gloss 기준)
   let maxGlossLen=0;
   const previewList=[];
   for(const ch of uniqKanji){
     const anki = ANKI[ch];
     const db   = KANJI[ch];
 
-    let glossRaw="";
+    let glossText="";
     if(anki && anki.mean){
-      // 안키에 있는 한자면 mean을 우선적으로 박스에 노출
-      glossRaw = anki.mean;
+      glossText = anki.mean;
     }else if(db){
-      // 안키에 없고 일반 DB에만 있으면 음/훈 결합
+      // 일반 DB는 박스 안에 음/훈만 넣어줄 수 있음
       const yomi=(db["음"]||"").toString().trim();
       const hun =(db["훈"]||"").toString().trim();
-      glossRaw=[yomi, hun].filter(Boolean).join(" · ");
+      glossText=[yomi, hun].filter(Boolean).join(" · ");
     }else{
-      // 둘 다 없으면 glossRaw 빈 문자열
-      glossRaw = "";
+      glossText = "";
     }
 
-    const glossInline = oneLine(glossRaw);
-    maxGlossLen = Math.max(maxGlossLen, glossInline.length);
-
-    previewList.push({
-      ch,
-      anki,
-      db,
-      glossInline
-    });
+    maxGlossLen=Math.max(maxGlossLen, glossText.replace(/\n/g," ").length);
+    previewList.push({ ch, anki, db, glossText });
   }
 
   const minW = Math.min(240, Math.max(72, maxGlossLen*8));
   kwrapDiv.innerHTML="";
 
   for(const item of previewList){
-    const { ch, anki, db, glossInline } = item;
+    const {ch, anki, db, glossText} = item;
 
-    // 한 줄로: [漢  gloss]
     const box=document.createElement("div");
-    box.className="kbox" + (anki ? " anki" : " db");
+    box.className="kbox"+(anki ? " anki" : "");
     box.style.minWidth = minW+"px";
-
     box.innerHTML = `
-      <span class="kbox-char">${escapeHtml(ch)}</span>
-      ${glossInline
-        ? `<span class="kbox-gloss">${escapeHtml(glossInline)}</span>`
-        : `<span class="kbox-gloss"></span>`
-      }
+      <div class="kbox-head">${escapeHtml(ch)}</div>
+      <div class="kbox-body">${nl2br(glossText)}</div>
     `;
 
+    // 클릭 동작:
+    // - 암기장(anki) 있으면: 아래 kExplain 토글 (설명 전개)
+    // - 암기장에 없으면: 네이버 일본어 사전으로 이동
     box.addEventListener("click",ev=>{
       ev.stopPropagation();
-
-      // 클릭 동작 규칙 다시 정리:
-      // 1) 이 한자가 ANKI(덱)에 존재하면 → kExplain에 anki.explain 토글
-      // 2) ANKI에 없으면 → 네이버 일본어 사전으로 이동
       if(anki){
-        // anki.explain을 kExplain에 토글
-        const exp = anki.explain || "";
         if(kExplain.style.display==="none"){
           kExplain.style.display="block";
-          kExplain.innerHTML = nl2br(exp || "(설명 없음)");
+          kExplain.innerHTML = nl2br(anki.explain || "(설명 없음)");
         }else{
-          // 같은 한자 다시 누르면 닫기
           kExplain.style.display="none";
           kExplain.innerHTML="";
         }
       }else{
-        // ANKI에 없으면 (일반DB만 있든 없든) → 일본어 사전으로
+        // anki에 없으면 그냥 일본어 사전으로
         openNaverJaLemma(ch);
       }
     });
@@ -650,11 +625,11 @@ async function openSubForToken(tok){
     kwrapDiv.appendChild(box);
   }
 
-  // 최종 위치 미세 조정
+  // 최종적으로 내용까지 다 들어간 뒤 위치 다시 조정
   placeSubNearMain();
 }
 
-// 메인 팝업 우하단 대각선 쪽에 서브팝업을 놓고, 화면 밖으로 나가면 조금만 안으로
+// 메인 팝업 우하단 대각선 쪽에 서브팝업을 놓되, 겹치지 않도록
 function placeSubNearMain(){
   if(sub.hidden) return;
 
@@ -663,10 +638,11 @@ function placeSubNearMain(){
   const sr=sub.getBoundingClientRect();
   const gap=8;
 
+  // 항상 메인팝업 우하단 대각선 기준
   let left = pr.right + gap;
   let top  = pr.bottom + gap;
 
-  // 화면 밖으로 튀어나가면 살짝 안으로만 밀어넣기
+  // 뷰포트에서 너무 밖으로 나가면 살짝 안으로만 밀어준다
   if(top + sr.height > vb.offsetTop + vb.height - 8){
     top = vb.offsetTop + vb.height - sr.height - 8;
   }
@@ -692,8 +668,10 @@ function relayout(){
 
   if(currentAnchor && !pop.hidden){
     if(currentDir){
+      // 현재 방향 유지해서 재배치
       applyDir(currentDir);
     }else{
+      // 아직 방향 고정 전이면 기본 알고리즘
       placeMainPopover(currentAnchor, pop, 8);
       ensureDock();
       updateArrowEnablement();
@@ -714,5 +692,5 @@ stage.addEventListener("click",e=>{
   if(!sub.hidden && !sub.contains(e.target)){
     sub.hidden=true;
   }
-  // 메인 팝업 닫기는 dock의 ✕만
+  // 메인 팝업 닫기는 dock의 ✕로만
 },{capture:false});
