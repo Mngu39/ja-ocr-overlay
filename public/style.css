@@ -280,22 +280,43 @@ html,body{
   margin-bottom:8px;
 }
 
-/* 개별 한자 박스 */
+/* 한자 박스(새 구조): 한 줄로 "漢자  gloss" */
 .kbox{
-  background:#222a39;
-  color:#e8eefc;
+  display:flex;
+  align-items:center;
+  gap:6px;
+
+  padding:6px 10px;
+  border-radius:8px;
   border:1px solid #2a2f3b;
-  border-radius:10px;
-  padding:6px 8px;
+  box-shadow:0 4px 16px rgba(0,0,0,.6);
+
+  background:#222a39;       /* 기본(DB) 쪽 */
+  color:#e8eefc;
   font-weight:700;
-  cursor:pointer;
+  font-size:15px;
   line-height:1.4;
-  word-break:break-word;
-  min-width:72px;
+  cursor:pointer;
+  white-space:nowrap;        /* 한 줄 유지 */
 }
+
 .kbox.anki{
-  background:#2d3b29;
+  background:#2d3b29;       /* ANKI에 있는 애는 초록톤 */
   color:#e8f6e8;
+  border-color:#335c3a;
+}
+
+.kbox-char{
+  font-size:18px;
+  font-weight:700;
+}
+
+.kbox-gloss{
+  font-size:14px;
+  font-weight:600;
+  opacity:.9;
+  text-overflow:ellipsis;
+  overflow:hidden;
 }
 .kbox-head{
   font-size:16px;
@@ -310,18 +331,25 @@ html,body{
   word-break:break-word;
 }
 
-/* 암기박사 상세 설명 */
-.k-explain{
-  background:#1a1f29;
-  border:1px solid #2a2f3b;
-  border-radius:8px;
+/* ANKI 설명(펼침 영역)
+   - ANKI 한자 박스를 탭했을 때만 나타나고
+   - 줄바꿈(\n) 유지해서 <br>로 찍어줌
+*/
+#kExplain{
+  display:none;
+  margin-top:8px;
   padding:8px;
-  font-size:13px;
+  border-radius:8px;
+  background:#1b1f29;
+  border:1px solid #2a2f3b;
+  box-shadow:0 4px 16px rgba(0,0,0,.6);
+
+  font-size:14px;
   line-height:1.5;
-  opacity:.95;
+  font-weight:500;
+  color:#e8f6e8;
+  max-width:80vw;
   word-break:break-word;
-  white-space:normal;
-  margin-bottom:8px;
 }
 
 /* dialog / edit */
