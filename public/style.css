@@ -53,7 +53,7 @@ html,body{
   font-size:14px;
 }
 
-/* ====== 인식 박스 ====== */
+/* ====== OCR 인식 박스 ====== */
 .box{
   position:absolute;
   border:2px solid var(--box);
@@ -86,29 +86,35 @@ html,body{
   color:var(--ink);
   border:1px solid var(--border);
   border-radius:14px;
-  padding:12px;
+  /* 화살표 바가 팝업 안쪽에 붙을 공간 확보 (위/아래/좌/우 28px 패딩) */
+  padding:28px;
   box-shadow:0 12px 40px rgba(0,0,0,.5);
   z-index:50;
 }
 
-/* 방향 이동 바 */
+/* 팝업 이동 화살표 바
+   - 팝업 내부 가장자리에 딱 붙음
+   - 길쭉한 막대 느낌 유지
+*/
 .arrow-bar{
   position:absolute;
-  opacity:.7;
   background:#2b2f3a;
   border-radius:6px;
   cursor:pointer;
   color:#fff;
   font-size:10px;
   font-weight:600;
+  line-height:1;
   display:flex;
   align-items:center;
   justify-content:center;
-  line-height:1;
   user-select:none;
   -webkit-user-select:none;
+  opacity:.8;
 }
-.arrow-bar:active{ filter:brightness(1.2); }
+.arrow-bar:active{
+  filter:brightness(1.2);
+}
 .arrow-bar.disabled{
   opacity:.25;
   cursor:not-allowed;
@@ -117,33 +123,33 @@ html,body{
   );
 }
 
-/* 위/아래 막대: 가로로 길게 얇게 */
+/* 위/아래 막대: 가로로 길고 얇게 */
 .arrow-top,
 .arrow-bottom{
   height:16px;
-  left:10%;
-  right:10%;
+  left:12%;
+  right:12%;
   min-width:60px;
 }
-.arrow-top{ top:-20px; }
-.arrow-bottom{ bottom:-20px; }
+.arrow-top{   top:4px; }
+.arrow-bottom{bottom:4px; }
 
-/* 좌/우 막대: 세로로 길게 얇게 */
+/* 좌/우 막대: 세로로 길고 얇게 */
 .arrow-left,
 .arrow-right{
   width:16px;
-  top:10%;
-  bottom:10%;
+  top:20%;
+  bottom:20%;
   min-height:60px;
   writing-mode:vertical-rl;
   text-orientation:upright;
   font-size:12px;
   line-height:1;
 }
-.arrow-left{ left:-20px; }
-.arrow-right{ right:-20px; }
+.arrow-left{  left:4px; }
+.arrow-right{ right:4px; }
 
-/* 루비 / 원문 줄 */
+/* 루비 줄 */
 .ruby-line{
   line-height:1.85;
   font-size:18px;
@@ -158,7 +164,6 @@ html,body{
   font-size:12px;
   color:#9fb3ff;
 }
-
 .tok{
   padding:2px 4px;
   border-radius:6px;
@@ -183,7 +188,7 @@ html,body{
   word-break:break-word;
 }
 
-/* 팝업 우측(또는 좌측) dock : ✕ / ✎ */
+/* dock: ✕ / ✎ (팝업 옆에 세로로) */
 .dock{
   position:absolute;
   top:8px;
@@ -229,11 +234,14 @@ html,body{
   line-height:1.5;
 }
 
-/* 헤더 한 줄: [표면형(루비 링크)] (lemma) 번역결과 */
+/* 헤더 한 줄:
+   [표면형(루비, 링크)]  (lemma)  [번역]
+   - lemma / meaning 이 표면형 글자(형태소)에 맞춰 baseline으로 정렬되도록
+*/
 .sub-head-row{
   display:flex;
   flex-wrap:wrap;
-  align-items:flex-start;
+  align-items:baseline;
   column-gap:8px;
   row-gap:4px;
   margin-bottom:8px;
@@ -298,9 +306,11 @@ html,body{
   font-size:13px;
   font-weight:600;
   opacity:.9;
+  white-space:normal;
+  word-break:break-word;
 }
 
-/* 상세 설명 (암기박사 등) */
+/* 암기박사 상세 설명 */
 .k-explain{
   background:#1a1f29;
   border:1px solid #2a2f3b;
@@ -312,20 +322,6 @@ html,body{
   word-break:break-word;
   white-space:normal;
   margin-bottom:8px;
-}
-
-/* 닫기 버튼 줄 */
-.sub-close-row{
-  display:flex;
-  justify-content:flex-end;
-}
-.sub-close-btn{
-  background:transparent;
-  color:#cfd4ff;
-  border:1px solid #3a3f4a;
-  background-color:#1f2330;
-  border-radius:10px;
-  font-weight:600;
 }
 
 /* dialog / edit */
