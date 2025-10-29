@@ -8,30 +8,43 @@
 </head>
 <body>
   <main id="stage">
+    <!-- 원본 이미지 -->
     <img id="img" alt="screenshot" />
+
+    <!-- OCR 박스들 올라가는 레이어 -->
     <div id="overlay"></div>
+
+    <!-- 하단 힌트 텍스트 -->
     <div id="hint">이미지 불러오는 중…</div>
 
     <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
-      <!-- 상단 드래그 핸들 -->
+      <!-- 상단부: 드래그 핸들 / (원래 있던 수정·닫기 텍스트 버튼들) -->
       <div class="pop-head">
+        <!-- 드래그 핸들 -->
         <div id="popDrag" class="drag-handle" title="드래그해서 이동"></div>
+
+        <!-- 이 영역은 지금 style.css에서 display:none 처리됨.
+             대신 app.js가 오른쪽에 .dock (✕/✎) 버튼을 따로 꽂아줌 -->
+        <div class="pop-actions">
+          <button id="btnEdit"  class="btn sm"       title="원문 수정">수정</button>
+          <button id="btnClose" class="btn sm ghost" title="닫기">닫기</button>
+        </div>
       </div>
 
-      <!-- 원문(루비) -->
+      <!-- 루비 붙은 원문 라인 -->
       <div id="rubyLine" class="ruby-line">…</div>
 
       <hr class="sep" />
 
-      <!-- 번역 -->
+      <!-- 번역 라인 -->
       <div id="transLine" class="trans-line">…</div>
 
-      <!-- 얇고 긴 방향바 (팝업 재배치용) -->
-      <div class="arrow-bar arrow-top"    data-dir="top"    title="위로 이동"></div>
-      <div class="arrow-bar arrow-bottom" data-dir="bottom" title="아래로 이동"></div>
-      <div class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로 이동"></div>
-      <div class="arrow-bar arrow-right"  data-dir="right"  title="오른쪽으로 이동"></div>
+      <!-- 방향 화살표 바 (지금은 style.css에서 display:none !important 로 숨겨둠) -->
+      <div class="arrow-bar arrow-top"    data-dir="top"    title="위로 정렬"></div>
+      <div class="arrow-bar arrow-bottom" data-dir="bottom" title="아래로 정렬"></div>
+      <div class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로 정렬"></div>
+      <div class="arrow-bar arrow-right"  data-dir="right"  title="오른쪽으로 정렬"></div>
     </div>
 
     <!-- 수정 다이얼로그 -->
@@ -46,17 +59,23 @@
       </form>
     </dialog>
 
-    <!-- 서브 팝업 -->
+    <!-- 서브 팝업 (토큰 상세) -->
     <div id="sub" class="subpop" hidden>
       <div class="sub-head">
+        <!-- 드래그 핸들:
+             style.css에서 투명 오버레이로 처리해서 "정체불명의 회색 막대"처럼 안 보이게 한 상태 -->
         <div id="subDrag" class="drag-handle small" title="드래그해서 이동"></div>
+
+        <!-- 토큰 표시 / lemma / 단어 번역까지 한 줄로 들어가는 곳 -->
         <span id="subTitle"></span>
       </div>
+
+      <!-- 한자 박스들 + (필요하면) 설명이 채워지는 본문 -->
       <div id="subBody"></div>
     </div>
   </main>
 
-  <!-- 앱 코드 -->
+  <!-- 메인 스크립트 -->
   <script type="module" src="./src/app.js"></script>
 </body>
 </html>
