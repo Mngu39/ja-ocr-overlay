@@ -521,103 +521,144 @@ Array.from(pop.querySelectorAll(".arrow-bar")).forEach(bar=>{
 
 // ===== 서브팝업 =====
 async function openSubForToken(tok){
-  currentTokenObj = tok;
-
+  // tok = { surface, reading, lemma }
   const surface = tok.surface || "";
   const reading = kataToHira(tok.reading || "");
   const lemma   = tok.lemma   || surface;
 
-  // 헤더(표면형+루비는 링크), lemma, 번역 자리
+  // -------- 1. 서브팝업 헤더 렌더 --------
+  // 헤더는: [표면형(후리가나)] (lemma)  한국어뜻
+  // 표면형은 네이버 일본어사전으로 연결
   const navUrl = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(lemma||surface)}`;
 
   subHead.innerHTML = `
     <a class="surf" href="${navUrl}" target="_blank" rel="noopener noreferrer">
       ${
         hasKanji(surface) && reading
-        ? `<ruby>${escapeHtml(surface)}<rt>${escapeHtml(reading)}</rt></ruby>`
-        : escapeHtml(surface)
+          ? `<ruby>${escapeHtml(surface)}<rt>${escapeHtml(reading)}</rt></ruby>`
+          : escapeHtml(surface)
       }
     </a>
     <span class="lemma">(${escapeHtml(lemma)})</span>
-    <span id="subMeaning" class="meaning"></span>
+    <span class="meaning" id="subMeaning"></span>
   `;
 
+  // -------- 2. 본문 초기화 --------
+  // kwrapDiv: 한자 박스들이 쭉 가로로 깔리는 영역
+  // kExplain: 안키(explain) 펼침 영역
   kwrapDiv.innerHTML = "";
-  kExplain.style.display="none";
-  kExplain.innerHTML="";
+  kExplain.style.display = "none";
+  kExplain.innerHTML = "";
 
-  // 일단 서브팝업을 바로 보이게 해서 "안 떠" 문제 제거
+  // 일단 서브팝업 보이게 하고 메인 팝업 기준 자리 잡기
   sub.hidden = false;
-  placeSubNearMain(); // 먼저 자리 잡고 시작
+  placeSubNearMain();
 
-  // 단어 번역 (lemma 기준)
-  try{
-    const r = await translateJaKo(lemma||surface);
+  // -------- 3. lemma 번역 → 헤더 마지막에 붙이기 --------
+  // (예: "벌칙 게임" 이런 거)
+  try {
+    const r = await translateJaKo(lemma || surface);
     const txt = r?.text || r?.result || r?.translation || "";
     const mEl = document.getElementById("subMeaning");
-    if(mEl){
+    if (mEl) {
       mEl.textContent = txt || "";
     }
-  }catch{
-    /* ignore - 번역 실패해도 그냥 빈칸 */
+  } catch(e) {
+    // 번역 실패 시 그냥 비워둠
   }
 
-  // 한자 박스
-  await DB_READY;
-  const uniqKanji = Array.from(new Set(Array.from(surface).filter(ch=>hasKanji(ch))));
+  // -------- 4. 한자 박스 렌더 --------
+  // 규칙:
+  //   - ANKI(덱)에 있는 한자 → 클릭하면 아래 kExplain에 explain 펼침/접기
+  //   - ANKI에 없는 한자 → 바로 네이버 일본어사전으로 새 탭 오픈
+  //   - KANJI(일반 DB)는 더 이상 따로 밑에 한 줄 출력 안 함.
+  //     (KANJI만 있고 ANKI엔 없는 경우도 "사전으로 이동" 쪽)
+  //
+  //   - 박스 안 텍스트는 한 줄: [漢자   gloss]
+  //     gloss는 우선 ANKI.mean, 없으면 KANJI의 음/훈 조합
+  //     줄바꿈 없이 한 줄로
 
-  // 박스 공통 최소폭 계산 (가장 긴 gloss 기준)
-  let maxGlossLen=0;
-  const previewList=[];
-  for(const ch of uniqKanji){
-    const anki = ANKI[ch];
-    const db   = KANJI[ch];
+  await DB_READY; // KANJI / ANKI 로딩 기다림
 
-    let glossText="";
-    if(anki && anki.mean){
-      glossText = anki.mean;
-    }else if(db){
-      // 일반 DB는 박스 안에 음/훈만 넣어줄 수 있음
-      const yomi=(db["음"]||"").toString().trim();
-      const hun =(db["훈"]||"").toString().trim();
-      glossText=[yomi, hun].filter(Boolean).join(" · ");
-    }else{
-      glossText = "";
+  // 표면형에서 한자만 추출해서 중복 제거
+  const uniqKanji = Array.from(
+    new Set(
+      Array.from(surface).filter(ch => hasKanji(ch))
+    )
+  );
+
+  // 박스 최소폭(너비)을 정할 때 gloss 가장 긴 걸 기준으로 맞추기
+  let maxGlossLen = 0;
+  const infoList = uniqKanji.map(ch => {
+    const ankiHit  = ANKI && ANKI[ch];
+    const dictHit  = KANJI && KANJI[ch];
+
+    // 한자 옆에 붙일 짧은 gloss
+    //   1순위: ankiHit.mean
+    //   2순위: dictHit["음"] / dictHit["훈"] 조합
+    //   없으면 ""
+    let glossRaw = "";
+    if (ankiHit && ankiHit.mean) {
+      glossRaw = ankiHit.mean;
+    } else if (dictHit) {
+      const yomi = (dictHit["음"] || "").toString().trim();
+      const hun  = (dictHit["훈"] || "").toString().trim();
+      glossRaw = [yomi, hun].filter(Boolean).join(" · ");
+    } else {
+      glossRaw = "";
     }
 
-    maxGlossLen=Math.max(maxGlossLen, glossText.replace(/\n/g," ").length);
-    previewList.push({ ch, anki, db, glossText });
-  }
+    // 한 줄용 정리 (엔터 등 공백 압축)
+    const glossInline = glossRaw.replace(/\s+/g, " ").trim();
+    if (glossInline.length > maxGlossLen) {
+      maxGlossLen = glossInline.length;
+    }
 
-  const minW = Math.min(240, Math.max(72, maxGlossLen*8));
-  kwrapDiv.innerHTML="";
+    return {
+      ch,
+      ankiHit,
+      glossInline
+    };
+  });
 
-  for(const item of previewList){
-    const {ch, anki, db, glossText} = item;
+  // gloss가 긴 애 기준으로 한자박스 min-width 결정
+  // (너무 들쭉말쭉하지 않게)
+  const minW = Math.min(
+    240,
+    Math.max(72, maxGlossLen * 8) // 글자수 → 대충 px 추정
+  );
 
-    const box=document.createElement("div");
-    box.className="kbox"+(anki ? " anki" : "");
-    box.style.minWidth = minW+"px";
+  // 실제 박스 DOM 만들기
+  for (const { ch, ankiHit, glossInline } of infoList) {
+    const box = document.createElement("div");
+    box.className = "kbox" + (ankiHit ? " anki" : " db");
+    box.style.minWidth = minW + "px";
+
+    // 박스 안에는 무조건 한 줄
     box.innerHTML = `
-      <div class="kbox-head">${escapeHtml(ch)}</div>
-      <div class="kbox-body">${nl2br(glossText)}</div>
+      <span class="kbox-char">${escapeHtml(ch)}</span>
+      <span class="kbox-gloss">${escapeHtml(glossInline)}</span>
     `;
 
     // 클릭 동작:
-    // - 암기장(anki) 있으면: 아래 kExplain 토글 (설명 전개)
-    // - 암기장에 없으면: 네이버 일본어 사전으로 이동
-    box.addEventListener("click",ev=>{
+    //  - ANKI에 있는 한자: 아래 kExplain 열고 닫기
+    //  - 그 외: 네이버 일본어 사전으로 이동
+    box.addEventListener("click",(ev)=>{
       ev.stopPropagation();
-      if(anki){
-        if(kExplain.style.display==="none"){
-          kExplain.style.display="block";
-          kExplain.innerHTML = nl2br(anki.explain || "(설명 없음)");
-        }else{
-          kExplain.style.display="none";
-          kExplain.innerHTML="";
+
+      if (ankiHit) {
+        const rawExplain = ankiHit.explain || "";
+        if (kExplain.style.display === "block") {
+          // 이미 열려 있으면 닫는다
+          kExplain.style.display = "none";
+          kExplain.innerHTML = "";
+        } else {
+          // 닫혀 있으면 연다 (개행 유지)
+          kExplain.style.display = "block";
+          kExplain.innerHTML = escapeHtml(rawExplain).replace(/\n/g,"<br>");
         }
-      }else{
-        // anki에 없으면 그냥 일본어 사전으로
+      } else {
+        // ANKI에 없는 애는 그냥 네이버 일본어사전으로
         openNaverJaLemma(ch);
       }
     });
@@ -625,7 +666,7 @@ async function openSubForToken(tok){
     kwrapDiv.appendChild(box);
   }
 
-  // 최종적으로 내용까지 다 들어간 뒤 위치 다시 조정
+  // 마지막으로 위치 다시 한 번 조정 (메인 팝업 우하단)
   placeSubNearMain();
 }
 
