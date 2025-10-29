@@ -14,13 +14,13 @@
 
     <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
-      <!-- 얇은 방향바들 (팝업 주위에 배치되는 얇고 긴 바) -->
-      <div class="arrow-bar arrow-top"    data-dir="top"    title="위쪽으로 붙이기"></div>
-      <div class="arrow-bar arrow-bottom" data-dir="bottom" title="아래쪽으로 붙이기"></div>
-      <div class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로 붙이기"></div>
-      <div class="arrow-bar arrow-right"  data-dir="right"  title="오른쪽으로 붙이기"></div>
+      <!-- 방향 이동 바들 -->
+      <div class="arrow-bar arrow-top"    data-dir="top"    title="위로 붙이기">▲</div>
+      <div class="arrow-bar arrow-bottom" data-dir="bottom" title="아래로 붙이기">▼</div>
+      <div class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로 붙이기">◀</div>
+      <div class="arrow-bar arrow-right"  data-dir="right"  title="오른쪽으로 붙이기">▶</div>
 
-      <!-- 원문(후리가나 포함, 클릭 가능한 토큰들) -->
+      <!-- 원문(후리가나 가능) / 토큰 클릭 가능 -->
       <div id="rubyLine" class="ruby-line">…</div>
 
       <hr class="sep" />
@@ -41,15 +41,15 @@
       </form>
     </dialog>
 
-    <!-- 서브 팝업 (단어 상세) -->
+    <!-- 서브 팝업 (토큰 상세) -->
     <div id="sub" class="subpop" hidden>
-      <!-- 헤더: 표면형+루비 / (lemma) / 번역 -->
+      <!-- 한 줄 헤더 영역: 표면형(루비, 링크) (lemma) 번역 -->
       <div id="subHead" class="sub-head-row"></div>
 
-      <!-- 한자 박스들 -->
+      <!-- 한자 박스 컨테이너 -->
       <div id="kwrap" class="kwrap"></div>
 
-      <!-- 암기박사 설명 표시 영역 (선택 시 아래로 여러 줄) -->
+      <!-- 암기박사/일반DB 설명 토글 영역 -->
       <div id="kExplain" class="k-explain" style="display:none;"></div>
 
       <!-- 닫기 버튼 -->
@@ -59,7 +59,6 @@
     </div>
   </main>
 
-  <!-- app -->
   <script type="module" src="./src/app.js"></script>
 </body>
 </html>
