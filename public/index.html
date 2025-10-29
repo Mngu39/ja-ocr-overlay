@@ -14,18 +14,18 @@
 
     <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
-      <!-- 방향 이동 바들 -->
+      <!-- 팝업 이동용 화살표 (팝업 안쪽 테두리 붙임) -->
       <div class="arrow-bar arrow-top"    data-dir="top"    title="위로 붙이기">▲</div>
       <div class="arrow-bar arrow-bottom" data-dir="bottom" title="아래로 붙이기">▼</div>
       <div class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로 붙이기">◀</div>
       <div class="arrow-bar arrow-right"  data-dir="right"  title="오른쪽으로 붙이기">▶</div>
 
-      <!-- 원문(후리가나 가능) / 토큰 클릭 가능 -->
+      <!-- 본문: 루비 붙은 원문(토큰 클릭 가능) -->
       <div id="rubyLine" class="ruby-line">…</div>
 
       <hr class="sep" />
 
-      <!-- 번역 -->
+      <!-- 번역 줄 -->
       <div id="transLine" class="trans-line">…</div>
     </div>
 
@@ -43,19 +43,14 @@
 
     <!-- 서브 팝업 (토큰 상세) -->
     <div id="sub" class="subpop" hidden>
-      <!-- 한 줄 헤더 영역: 표면형(루비, 링크) (lemma) 번역 -->
+      <!-- 한 줄 헤더: 표면형(+후리가나, 링크) / (lemma) / 번역 -->
       <div id="subHead" class="sub-head-row"></div>
 
-      <!-- 한자 박스 컨테이너 -->
+      <!-- 한자 박스들 -->
       <div id="kwrap" class="kwrap"></div>
 
-      <!-- 암기박사/일반DB 설명 토글 영역 -->
+      <!-- 암기박사 설명 토글 영역 -->
       <div id="kExplain" class="k-explain" style="display:none;"></div>
-
-      <!-- 닫기 버튼 -->
-      <div class="sub-close-row">
-        <button id="subClose" class="btn ghost sm sub-close-btn">닫기</button>
-      </div>
     </div>
   </main>
 
