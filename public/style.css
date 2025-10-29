@@ -1,6 +1,17 @@
 :root{
-  --bg:#0b0b0c; --ink:#e8e8ea; --muted:#a9abb3; --accent:#4da3ff;
-  --box:#4da3ff; --box-active:#00d4ff; --pop:#141417; --border:#2a2a31;
+  --bg:#0b0b0c;
+  --ink:#e8e8ea;
+  --muted:#a9abb3;
+  --accent:#4da3ff;
+
+  --box:#4da3ff;
+  --box-active:#00d4ff;
+
+  --pop:#141417;
+  --border:#2a2a31;
+
+  --dock-bg:#2b2f3a;
+  --dock-fg:#fff;
 }
 
 *{ box-sizing:border-box; }
@@ -9,7 +20,8 @@ html,body{
   height:100%;
   background:var(--bg);
   color:var(--ink);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans JP","Malgun Gothic",sans-serif;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
+    "Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans JP","Malgun Gothic",sans-serif;
 }
 #stage{
   position:relative;
@@ -35,15 +47,13 @@ html,body{
 }
 #hint{
   position:absolute;
-  left:0;
-  right:0;
-  bottom:18px;
+  left:0; right:0; bottom:18px;
   text-align:center;
   color:var(--muted);
   font-size:14px;
 }
 
-/* OCR 박스 */
+/* ====== OCR 인식 박스 ====== */
 .box{
   position:absolute;
   border:2px solid var(--box);
@@ -68,7 +78,7 @@ html,body{
   font-size:12px;
 }
 
-/* 메인 팝업 */
+/* ====== 메인 팝업 ====== */
 .popover{
   position:absolute;
   max-width:min(92vw, 900px);
@@ -76,50 +86,70 @@ html,body{
   color:var(--ink);
   border:1px solid var(--border);
   border-radius:14px;
-  padding:10px 12px 12px;
+  /* 화살표 바가 팝업 안쪽에 붙을 공간 확보 (위/아래/좌/우 28px 패딩) */
+  padding:28px;
   box-shadow:0 12px 40px rgba(0,0,0,.5);
   z-index:50;
 }
 
-/* 상단 줄(원래 있던 얇은 회색 바 느낌 대신 완전 제거하고 싶은 경우 margin만) */
-.pop-head{
+/* 팝업 이동 화살표 바
+   - 팝업 내부 가장자리에 딱 붙음
+   - 길쭉한 막대 느낌 유지
+*/
+.arrow-bar{
+  position:absolute;
+  background:#2b2f3a;
+  border-radius:6px;
+  cursor:pointer;
+  color:#fff;
+  font-size:10px;
+  font-weight:600;
+  line-height:1;
   display:flex;
   align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  margin:0 0 6px;
-  min-height:0;
-}
-
-/* 오른쪽에 뜨는 X / ✎ 도킹 버튼 */
-.dock{
-  position:absolute;
-  top:8px;
-  width:36px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  z-index:9999;
-}
-.dock-right{ right:-44px; }
-.dock-left { left:-44px; }
-
-.dock-btn{
-  width:36px;
-  height:36px;
-  border-radius:18px;
-  background:#2b2f3a;
-  color:#fff;
-  font-size:14px;
-  line-height:36px;
-  text-align:center;
-  font-weight:600;
-  cursor:pointer;
-  box-shadow:0 6px 20px rgba(0,0,0,.6);
+  justify-content:center;
   user-select:none;
+  -webkit-user-select:none;
+  opacity:.8;
+}
+.arrow-bar:active{
+  filter:brightness(1.2);
+}
+.arrow-bar.disabled{
+  opacity:.25;
+  cursor:not-allowed;
+  background:repeating-linear-gradient(
+    45deg,#333,#333 6px,#3b3b3b 6px,#3b3b3b 12px
+  );
 }
 
-/* 본문 텍스트들 */
+/* 위/아래 막대: 가로로 길고 얇게 */
+.arrow-top,
+.arrow-bottom{
+  height:16px;
+  left:12%;
+  right:12%;
+  min-width:60px;
+}
+.arrow-top{   top:4px; }
+.arrow-bottom{bottom:4px; }
+
+/* 좌/우 막대: 세로로 길고 얇게 */
+.arrow-left,
+.arrow-right{
+  width:16px;
+  top:20%;
+  bottom:20%;
+  min-height:60px;
+  writing-mode:vertical-rl;
+  text-orientation:upright;
+  font-size:12px;
+  line-height:1;
+}
+.arrow-left{  left:4px; }
+.arrow-right{ right:4px; }
+
+/* 루비 줄 */
 .ruby-line{
   line-height:1.85;
   font-size:18px;
@@ -143,61 +173,53 @@ html,body{
   cursor:pointer;
 }
 
+/* 구분선 */
+.sep{
+  border:none;
+  border-top:1px solid var(--border);
+  margin:8px 0;
+}
+
+/* 번역 줄 */
 .trans-line{
   font-size:18px;
   line-height:1.7;
   color:#e7f6ff;
   word-break:break-word;
-  border-top:1px solid var(--border);
-  margin-top:6px;
-  padding-top:6px;
 }
 
-/* 화살표 바 (얇고 긴 버튼). 팝업 테두리 바깥으로 삐져나오지 않게 */
-.arrow-bar{
+/* dock: ✕ / ✎ (팝업 옆에 세로로) */
+.dock{
   position:absolute;
-  opacity:.55;
-  background:#2b2f3a;
-  border-radius:6px;
+  top:8px;
+  width:36px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  z-index:80;
+}
+.dock-left{ left:-44px; }
+.dock-right{ right:-44px; }
+
+.dock-btn{
+  width:36px;
+  height:36px;
+  border-radius:18px;
+  background:var(--dock-bg);
+  color:var(--dock-fg);
+  border:1px solid #3a3f4a;
+  font-size:14px;
+  font-weight:600;
+  line-height:36px;
+  text-align:center;
   cursor:pointer;
   user-select:none;
 }
-.arrow-top,
-.arrow-bottom{
-  height:8px;
-  left:10%;
-  right:10%;
-}
-.arrow-top{
-  top:-12px;
-}
-.arrow-bottom{
-  bottom:-12px;
-}
-.arrow-left,
-.arrow-right{
-  width:8px;
-  top:10%;
-  bottom:10%;
-}
-.arrow-left{
-  left:-12px;
-}
-.arrow-right{
-  right:-12px;
-}
-.arrow-bar:hover{
-  opacity:.85;
-}
-.arrow-bar.disabled{
-  opacity:.25;
-  cursor:not-allowed;
-  background:repeating-linear-gradient(
-    45deg,#333,#333 6px,#3b3b3b 6px,#3b3b3b 12px
-  );
+.dock-btn:active{
+  filter:brightness(1.2);
 }
 
-/* 서브 팝업 */
+/* ====== 서브 팝업 ====== */
 .subpop{
   position:absolute;
   max-width:86vw;
@@ -205,105 +227,104 @@ html,body{
   color:var(--ink);
   border:1px solid var(--border);
   border-radius:12px;
-  padding:8px 10px;
-  box-shadow:0 8px 30px rgba(0,0,0,.5);
+  padding:10px 12px 12px;
   z-index:60;
-  min-width:200px;
+  box-shadow:0 8px 30px rgba(0,0,0,.5);
+  font-size:14px;
+  line-height:1.5;
 }
 
-.sub-head{
+/* 헤더 한 줄:
+   [표면형(루비, 링크)]  (lemma)  [번역]
+   - lemma / meaning 이 표면형 글자(형태소)에 맞춰 baseline으로 정렬되도록
+*/
+.sub-head-row{
   display:flex;
   flex-wrap:wrap;
-  align-items:flex-start;
-  row-gap:4px;
+  align-items:baseline;
   column-gap:8px;
+  row-gap:4px;
   margin-bottom:8px;
-  line-height:1.4;
-  font-size:16px;
-  font-weight:600;
+  font-size:15px;
+  line-height:1.5;
   color:#fff;
+  word-break:break-word;
 }
-.sub-head .surf{
+.sub-head-row a.surf{
   color:#fff;
   text-decoration:none;
   font-weight:700;
   font-size:16px;
+  line-height:1.5;
 }
-.sub-head .surf ruby rt{
-  font-size:12px;
+.sub-head-row a.surf ruby rt{
+  font-size:11px;
   line-height:1.2;
   color:#9fb3ff;
 }
-.sub-head .lemma{
-  opacity:.8;
-  font-weight:500;
+.sub-head-row .lemma{
+  opacity:.7;
   font-size:14px;
-  color:#cfd4ff;
 }
-.sub-head .meaning{
-  font-size:14px;
-  font-weight:500;
+.sub-head-row .meaning{
   color:#e7f6ff;
+  font-size:15px;
+  font-weight:500;
 }
 
+/* 한자들 래핑 */
 .kwrap{
   display:flex;
   flex-wrap:wrap;
-  gap:6px;
+  gap:8px;
+  margin-bottom:8px;
 }
 
-/* 한자 박스: 한 줄 레이아웃 */
+/* 개별 한자 박스 */
 .kbox{
-  display:flex;
-  align-items:center;
-  justify-content:flex-start;
-  gap:6px;
-  padding:6px 10px;
-  border-radius:8px;
-  border:1px solid #2a2f3b;
-  font-weight:700;
-  line-height:1.4;
-  cursor:pointer;
-  box-shadow:0 4px 16px rgba(0,0,0,.6);
-  background:#222a39;      /* 기본(DB) 색 */
+  background:#222a39;
   color:#e8eefc;
-  font-size:15px;
+  border:1px solid #2a2f3b;
+  border-radius:10px;
+  padding:6px 8px;
+  font-weight:700;
+  cursor:pointer;
+  line-height:1.4;
+  word-break:break-word;
+  min-width:72px;
 }
 .kbox.anki{
   background:#2d3b29;
   color:#e8f6e8;
-  border-color:#335c3a;
 }
-.kbox-char{
-  font-size:18px;
+.kbox-head{
+  font-size:16px;
   font-weight:700;
+  margin-bottom:4px;
 }
-.kbox-gloss{
-  font-size:14px;
+.kbox-body{
+  font-size:13px;
   font-weight:600;
   opacity:.9;
-  white-space:nowrap;      /* 한 줄로 붙여서 보이게 */
-  text-overflow:ellipsis;  /* 혹시 너무 길면 시각적으로 줄임표 */
-  overflow:hidden;
-}
-
-#kExplain{
-  display:none;
-  margin-top:8px;
-  padding:8px;
-  border-radius:8px;
-  background:#1b1f29;
-  border:1px solid #2a2f3b;
-  box-shadow:0 4px 16px rgba(0,0,0,.6);
-  font-size:14px;
-  line-height:1.5;
-  font-weight:500;
-  color:#e8f6e8;
-  max-width:80vw;
+  white-space:normal;
   word-break:break-word;
 }
 
-/* dialog (수정창) */
+/* 암기박사 상세 설명 */
+.k-explain{
+  background:#1a1f29;
+  border:1px solid #2a2f3b;
+  border-radius:8px;
+  padding:8px;
+  font-size:13px;
+  line-height:1.5;
+  opacity:.95;
+  word-break:break-word;
+  white-space:normal;
+  margin-bottom:8px;
+}
+
+/* dialog / edit */
 dialog{
   border:none;
   border-radius:12px;
@@ -332,27 +353,9 @@ menu{
   margin:0;
   padding:0;
 }
-.btn{
-  background:var(--accent);
-  color:#021323;
-  border:none;
-  padding:8px 12px;
-  border-radius:10px;
-  font-weight:600;
-  cursor:pointer;
-}
-.btn.ghost{
-  background:transparent;
-  color:var(--muted);
-  border:1px solid var(--border);
-}
-.btn.sm{
-  padding:6px 10px;
-  font-size:12px;
-}
 
 /* 선택 방지 */
-img, .box, .popover, .subpop, .dock-btn{
+img, .box, .popover, .subpop{
   -webkit-user-select:none;
   user-select:none;
 }
