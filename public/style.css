@@ -18,7 +18,8 @@
 html,body{
   margin:0;
   height:100%;
-  background:var(--bg); color:var(--ink);
+  background:var(--bg);
+  color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
     "Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans JP","Malgun Gothic",sans-serif;
 }
@@ -90,44 +91,59 @@ html,body{
   z-index:50;
 }
 
-/* 얇은 방향바 (상하좌우 붙이는 이동버튼) */
+/* 방향 이동 바 */
 .arrow-bar{
   position:absolute;
-  opacity:.55;
+  opacity:.7;
   background:#2b2f3a;
   border-radius:6px;
   cursor:pointer;
+  color:#fff;
+  font-size:10px;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1;
+  user-select:none;
+  -webkit-user-select:none;
 }
-.arrow-bar:hover{ opacity:.85; }
-
+.arrow-bar:active{ filter:brightness(1.2); }
 .arrow-bar.disabled{
   opacity:.25;
   cursor:not-allowed;
-  background:
-    repeating-linear-gradient(45deg,#333,#333 6px,#3b3b3b 6px,#3b3b3b 12px);
+  background:repeating-linear-gradient(
+    45deg,#333,#333 6px,#3b3b3b 6px,#3b3b3b 12px
+  );
 }
 
-/* 위/아래 막대는 가로로 길게, 얇게 */
+/* 위/아래 막대: 가로로 길게 얇게 */
 .arrow-top,
 .arrow-bottom{
-  height:8px;
+  height:16px;
   left:10%;
   right:10%;
+  min-width:60px;
 }
-.arrow-top{ top:-12px; }
-.arrow-bottom{ bottom:-12px; }
+.arrow-top{ top:-20px; }
+.arrow-bottom{ bottom:-20px; }
 
-/* 좌/우 막대는 세로로 길게, 얇게 */
+/* 좌/우 막대: 세로로 길게 얇게 */
 .arrow-left,
 .arrow-right{
-  width:8px;
+  width:16px;
   top:10%;
   bottom:10%;
+  min-height:60px;
+  writing-mode:vertical-rl;
+  text-orientation:upright;
+  font-size:12px;
+  line-height:1;
 }
-.arrow-left{ left:-12px; }
-.arrow-right{ right:-12px; }
+.arrow-left{ left:-20px; }
+.arrow-right{ right:-20px; }
 
-/* 루비/원문 줄 */
+/* 루비 / 원문 줄 */
 .ruby-line{
   line-height:1.85;
   font-size:18px;
@@ -167,7 +183,7 @@ html,body{
   word-break:break-word;
 }
 
-/* 팝업 우측 dock (✕ / ✎) */
+/* 팝업 우측(또는 좌측) dock : ✕ / ✎ */
 .dock{
   position:absolute;
   top:8px;
@@ -213,13 +229,13 @@ html,body{
   line-height:1.5;
 }
 
-/* 헤더 한 줄: 표면형(루비) (lemma) 번역 */
+/* 헤더 한 줄: [표면형(루비 링크)] (lemma) 번역결과 */
 .sub-head-row{
   display:flex;
   flex-wrap:wrap;
   align-items:flex-start;
-  row-gap:4px;
   column-gap:8px;
+  row-gap:4px;
   margin-bottom:8px;
   font-size:15px;
   line-height:1.5;
@@ -248,7 +264,7 @@ html,body{
   font-weight:500;
 }
 
-/* 한자 박스들 */
+/* 한자들 래핑 */
 .kwrap{
   display:flex;
   flex-wrap:wrap;
@@ -267,6 +283,7 @@ html,body{
   cursor:pointer;
   line-height:1.4;
   word-break:break-word;
+  min-width:72px;
 }
 .kbox.anki{
   background:#2d3b29;
@@ -282,6 +299,8 @@ html,body{
   font-weight:600;
   opacity:.9;
 }
+
+/* 상세 설명 (암기박사 등) */
 .k-explain{
   background:#1a1f29;
   border:1px solid #2a2f3b;
@@ -295,7 +314,7 @@ html,body{
   margin-bottom:8px;
 }
 
-/* 서브 닫기 버튼 줄 */
+/* 닫기 버튼 줄 */
 .sub-close-row{
   display:flex;
   justify-content:flex-end;
@@ -309,27 +328,7 @@ html,body{
   font-weight:600;
 }
 
-/* 기본 버튼들 (다이얼로그 etc) */
-.btn{
-  background:var(--accent);
-  color:#021323;
-  border:none;
-  padding:8px 12px;
-  border-radius:10px;
-  font-weight:600;
-  cursor:pointer;
-}
-.btn.ghost{
-  background:transparent;
-  color:var(--muted);
-  border:1px solid var(--border);
-}
-.btn.sm{
-  padding:6px 10px;
-  font-size:12px;
-}
-
-/* dialog for 편집 */
+/* dialog / edit */
 dialog{
   border:none;
   border-radius:12px;
@@ -359,7 +358,7 @@ menu{
   padding:0;
 }
 
-/* 선택 방지 (iOS 더블탭 드래그 방지) */
+/* 선택 방지 */
 img, .box, .popover, .subpop{
   -webkit-user-select:none;
   user-select:none;
