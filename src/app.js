@@ -23,20 +23,19 @@ const editOkBtn = document.getElementById("editOk");
 
 const sub       = document.getElementById("sub");
 const subHead   = document.getElementById("subHead");
-const subClose  = document.getElementById("subClose");
 const kwrapDiv  = document.getElementById("kwrap");
 const kExplain  = document.getElementById("kExplain");
 
-// 선택 상태
-let annos = [];            // [{text, polygon[[x,y]x4]}, ...]
-let selected = [];         // [{el, text}]
-let currentAnchor = null;  // 항상 "첫번째" 선택 박스
+// 현재 선택 상태
+let annos = [];            // [{text, polygon:[[x,y]..]}, ...]
+let selected = [];         // [{el,text}]
+let currentAnchor = null;  // 항상 첫 번째 선택 박스
 let currentDir = null;     // pop이 anchor 기준 어디에 붙어있는지(top/bottom/left/right)
-let currentTokenObj = null; // 마지막으로 클릭한 토큰(서브팝업용)
+let currentTokenObj = null;
 
 // ===== Kanji DBs =====
 // 일반 DB(KANJI): { '漢': { "음": "...", "훈": "...", ... }, ... }
-// 암기 DB(ANKI):  { '漢': { mean: "...", explain: "..." }, ... }
+// 암기 DB(ANKI):  { '漢': { mean:"...", explain:"..." }, ... }
 let KANJI = {};
 let ANKI  = {};
 
@@ -62,7 +61,7 @@ async function loadDBs(){
         if(Array.isArray(node?.notes)){
           for(const n of node.notes){
             const f=n.fields||[];
-            const ch      =(f[1]??"").toString().trim(); // 한자
+            const ch      =(f[1]??"").toString().trim();
             const mean    =(f[2]??"").toString().replace(/<[^>]+>/g,"").trim();
             const explain =(f[3]??"").toString().replace(/<[^>]+>/g,"").trim();
             if(ch && ch.length===1){
@@ -93,7 +92,7 @@ function nl2br(s){
   return escapeHtml(s).replace(/\n/g,"<br>");
 }
 
-// 월 1,000건 로컬 카운트
+// ===== 사용량 카운트 =====
 function quotaKey(){
   const d=new Date();
   return `gcv_quota_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}`;
@@ -110,7 +109,7 @@ function rollbackQuota(k){
   localStorage.setItem(k,Math.max(0,n-1));
 }
 
-// ===== 이미지 로드 → OCR =====
+// ===== 이미지 로드 → OCR (절대진리 부분 변경 없음) =====
 (async function bootstrap(){
   try{
     const qs=new URLSearchParams(location.search);
@@ -143,7 +142,7 @@ function rollbackQuota(k){
       hint.textContent="이미지를 불러오지 못했습니다";
     };
 
-    // 절대진리: 이 줄은 어떤 경우에도 바꾸지 않는다
+    // 절대 건드리지 않는 라인
     imgEl.src = await getImageById(id);
 
   }catch(e){
@@ -151,7 +150,7 @@ function rollbackQuota(k){
   }
 })();
 
-// ===== 오버레이 박스 =====
+// ===== OCR 박스 렌더/선택 =====
 function renderOverlay(){
   const rect=imgEl.getBoundingClientRect();
   overlay.style.width  = rect.width +"px";
@@ -167,7 +166,8 @@ function renderOverlay(){
     const t=Math.min(p0[1],p1[1])*sy;
     const r=Math.max(p1[0],p2[0])*sx;
     const b=Math.max(p2[1],p3[1])*sy;
-    const w=Math.max(6,r-l), h=Math.max(6,b-t);
+    const w=Math.max(6,r-l);
+    const h=Math.max(6,b-t);
 
     const box=document.createElement("div");
     box.className="box";
@@ -193,9 +193,8 @@ function toggleSelect(box){
   const i = selected.findIndex(x=>x.el===box);
   if(i>=0){
     // 해제
-    const it=selected[i];
-    it.el.classList.remove("selected");
-    it.el.querySelector(".ord")?.remove();
+    box.classList.remove("selected");
+    box.querySelector(".ord")?.remove();
     selected.splice(i,1);
   }else{
     // 선택
@@ -210,7 +209,7 @@ function toggleSelect(box){
   renumberSelected();
 
   if(selected.length){
-    currentAnchor = selected[0].el; // 항상 첫번째
+    currentAnchor = selected[0].el; // 기준은 항상 첫번째
     openMainFromSelection();
   }else{
     pop.hidden=true;
@@ -234,7 +233,7 @@ function openMainFromSelection(){
   openMainPopover(currentAnchor, selectedText());
 }
 
-// 우측(또는 좌측) 떠있는 ✕ / ✎ dock 만들기
+// dock: 팝업 옆에 ✕ / ✎
 function ensureDock(){
   let dock = pop.querySelector(".dock");
   if(!dock){
@@ -273,7 +272,7 @@ function ensureDock(){
     pop.appendChild(dock);
   }
 
-  // dock이 화면 밖으로 나가면 왼쪽으로 붙이기
+  // dock이 화면을 벗어나면 반대편으로
   const vb=getVB();
   const pr=pop.getBoundingClientRect();
   const dockW=44;
@@ -283,6 +282,7 @@ function ensureDock(){
   dock.classList.toggle("dock-left",  !canRight);
 }
 
+// 수정 다이얼로그 저장
 editOkBtn.addEventListener("click",()=>{
   const t=editInput.value.trim();
   if(!t){
@@ -293,7 +293,7 @@ editOkBtn.addEventListener("click",()=>{
   openMainPopover(currentAnchor, t); // 수정된 텍스트로 다시 렌더
 });
 
-// 임시 토큰(= fallback) 만들어주는 함수
+// fallback 토큰: 후리가나 없어도 먼저 clickable하게
 function renderFallbackTokens(container, text){
   container.innerHTML="";
   text.split(/(\s+)/).forEach(tok=>{
@@ -313,7 +313,7 @@ function renderFallbackTokens(container, text){
   });
 }
 
-// 실제 후리가나 토큰 구성 + 클릭 핸들러
+// 실제 후리가나 토큰 구성
 function renderFuriganaTokens(container, tokens){
   container.innerHTML = tokens.map(t=>{
     const surf = escapeHtml(t.surface);
@@ -338,12 +338,13 @@ function renderFuriganaTokens(container, tokens){
   });
 }
 
+// 메인 팝업 실제 렌더
 async function openMainPopover(anchor, text){
   pop.hidden=false;
   sub.hidden=true;
-  currentDir=null; // 아직 top/bottom/left/right 고정 안 함
+  currentDir=null; // 아직 방향(위/아래/좌/우) 고정 안 함
 
-  // 폭 결정 (anchor 폭 기반)
+  // 팝업 폭: anchor 폭 기반
   const aw = anchor.getBoundingClientRect().width;
   const overlayW = overlay.clientWidth;
   pop.style.width = Math.min(
@@ -351,28 +352,29 @@ async function openMainPopover(anchor, text){
     Math.round(overlayW*0.92)
   )+"px";
 
-  // 우선 기본 위치에 한 번 놓는다
+  // 일단 기본 위치로 한 번 놓고
   placeMainPopover(anchor, pop, 8);
 
-  // 1) 우선 fallback 토큰/빈 번역 넣어둬 → 클릭 즉시 서브팝업 떠야 하니까
+  // 1차 표시: fallback 토큰 / 번역 placeholder
   renderFallbackTokens(rubyLine, text);
-  transLine.textContent = "…";
+  transLine.textContent="…";
 
-  // dock / 화살표 상태도 초기화
   requestAnimationFrame(()=>{
     ensureDock();
     updateArrowEnablement();
   });
 
-  // 2) 진짜 후리가나·번역 가져와서 교체
+  // 실제 후리가나 / 번역
   try{
     const [rubi, tr] = await Promise.all([
       getFurigana(text),
       translateJaKo(text)
     ]);
 
-    const tokens = (rubi?.tokens || rubi?.result ||
-                    rubi?.morphs || rubi?.morphemes || [])
+    const tokens = (rubi?.tokens ||
+                    rubi?.result ||
+                    rubi?.morphs ||
+                    rubi?.morphemes || [])
       .map(t=>({
         surface: t.surface || t.text || "",
         reading: kataToHira(t.reading || t.read || t.kana || ""),
@@ -386,11 +388,7 @@ async function openMainPopover(anchor, text){
     }
 
     const out = tr?.text || tr?.result || tr?.translation || "";
-    if(out){
-      transLine.textContent = out;
-    }else{
-      transLine.textContent = "(번역 없음)";
-    }
+    transLine.textContent = out || "(번역 없음)";
   }catch(e){
     console.error(e);
     if(!transLine.textContent || transLine.textContent==="…"){
@@ -398,14 +396,13 @@ async function openMainPopover(anchor, text){
     }
   }
 
-  // 마지막으로 dock 위치/화살표 갱신
   requestAnimationFrame(()=>{
     ensureDock();
     updateArrowEnablement();
   });
 }
 
-// ===== 팝업 방향 화살표 =====
+// ===== 팝업 이동 화살표 =====
 function getVB(){
   return (globalThis.visualViewport || {
     width:innerWidth,
@@ -415,7 +412,7 @@ function getVB(){
   });
 }
 
-// anchor 기준 특정 방향(dir)에 pop을 "딱 붙여서" 둘 좌표 계산
+// anchor 기준으로 pop을 특정 방향(dir)에 "딱 붙여서" 둘 좌표 계산
 function calcPosForDir(dir){
   if(!currentAnchor) return null;
   const gap=8;
@@ -447,7 +444,7 @@ function calcPosForDir(dir){
   };
 }
 
-// 주어진 dir로 뒀을 때 화면에서 너무 벗어나면 false
+// dir 위치가 화면 안에 들어가는지 검사
 function canPlaceDir(dir){
   const vb=getVB();
   const box=calcPosForDir(dir);
@@ -460,9 +457,9 @@ function canPlaceDir(dir){
   const rBottom = box.top  + box.height;
 
   const minX = vb.offsetLeft + margin;
-  const maxX = vb.offsetLeft + vb.width - margin;
+  const maxX = vb.offsetLeft + vb.width  - margin;
   const minY = vb.offsetTop  + margin;
-  const maxY = vb.offsetTop  + vb.height- margin;
+  const maxY = vb.offsetTop  + vb.height - margin;
 
   return (
     rLeft   >= minX &&
@@ -472,7 +469,7 @@ function canPlaceDir(dir){
   );
 }
 
-// 실제로 dir 적용
+// 실제로 dir로 이동
 function applyDir(dir){
   const box=calcPosForDir(dir);
   if(!box) return;
@@ -483,11 +480,11 @@ function applyDir(dir){
   currentDir=dir;
 
   ensureDock();
-  placeSubNearMain(); // 서브팝업이 열려있으면 위치도 맞춰줌
+  placeSubNearMain(); // 서브팝업이 열려 있다면 갱신
   updateArrowEnablement();
 }
 
-// 활성/비활성 표시
+// 화살표 활성/비활성
 function updateArrowEnablement(){
   const topBar    = pop.querySelector(".arrow-top");
   const bottomBar = pop.querySelector(".arrow-bottom");
@@ -512,7 +509,7 @@ function updateArrowEnablement(){
   }
 }
 
-// 화살표 클릭 핸들러
+// 화살표 클릭
 Array.from(pop.querySelectorAll(".arrow-bar")).forEach(bar=>{
   bar.addEventListener("click",e=>{
     e.stopPropagation();
@@ -530,7 +527,7 @@ async function openSubForToken(tok){
   const reading = kataToHira(tok.reading || "");
   const lemma   = tok.lemma   || surface;
 
-  // 우선 '비었지만 보이는 서브팝업'을 즉시 만든다 (즉각 피드백)
+  // 헤더(표면형+루비는 링크), lemma, 번역 자리
   const navUrl = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(lemma||surface)}`;
 
   subHead.innerHTML = `
@@ -549,10 +546,11 @@ async function openSubForToken(tok){
   kExplain.style.display="none";
   kExplain.innerHTML="";
 
+  // 일단 서브팝업을 바로 보이게 해서 "안 떠" 문제 제거
   sub.hidden = false;
-  placeSubNearMain(); // 바로 위치 잡아줌 (내용 비어도)
+  placeSubNearMain(); // 먼저 자리 잡고 시작
 
-  // 번역 (단어 뜻)
+  // 단어 번역 (lemma 기준)
   try{
     const r = await translateJaKo(lemma||surface);
     const txt = r?.text || r?.result || r?.translation || "";
@@ -561,15 +559,14 @@ async function openSubForToken(tok){
       mEl.textContent = txt || "";
     }
   }catch{
-    // 번역 실패해도 그냥 빈칸
+    /* ignore - 번역 실패해도 그냥 빈칸 */
   }
 
-  // 한자 박스 채우기
+  // 한자 박스
   await DB_READY;
-
   const uniqKanji = Array.from(new Set(Array.from(surface).filter(ch=>hasKanji(ch))));
 
-  // 먼저 모든 박스에 들어갈 gloss 길이 측정 → 공통 min-width
+  // 박스 공통 최소폭 계산 (가장 긴 gloss 기준)
   let maxGlossLen=0;
   const previewList=[];
   for(const ch of uniqKanji){
@@ -578,13 +575,14 @@ async function openSubForToken(tok){
 
     let glossText="";
     if(anki && anki.mean){
-      glossText=anki.mean;
+      glossText = anki.mean;
     }else if(db){
+      // 일반 DB는 박스 안에 음/훈만 넣어줄 수 있음
       const yomi=(db["음"]||"").toString().trim();
       const hun =(db["훈"]||"").toString().trim();
       glossText=[yomi, hun].filter(Boolean).join(" · ");
     }else{
-      glossText="";
+      glossText = "";
     }
 
     maxGlossLen=Math.max(maxGlossLen, glossText.replace(/\n/g," ").length);
@@ -592,36 +590,25 @@ async function openSubForToken(tok){
   }
 
   const minW = Math.min(240, Math.max(72, maxGlossLen*8));
-
   kwrapDiv.innerHTML="";
-  for(const item of previewList){
-    const {ch, anki, db} = item;
 
-    let bodyHtml="";
-    if(anki && anki.mean){
-      bodyHtml = nl2br(anki.mean);
-    }else if(db){
-      const yomi=(db["음"]||"").toString().trim();
-      const hun =(db["훈"]||"").toString().trim();
-      const combo=[yomi, hun].filter(Boolean).join(" · ");
-      bodyHtml = nl2br(combo);
-    }else{
-      bodyHtml = "";
-    }
+  for(const item of previewList){
+    const {ch, anki, db, glossText} = item;
 
     const box=document.createElement("div");
     box.className="kbox"+(anki ? " anki" : "");
     box.style.minWidth = minW+"px";
     box.innerHTML = `
       <div class="kbox-head">${escapeHtml(ch)}</div>
-      <div class="kbox-body">${bodyHtml}</div>
+      <div class="kbox-body">${nl2br(glossText)}</div>
     `;
 
+    // 클릭 동작:
+    // - 암기장(anki) 있으면: 아래 kExplain 토글 (설명 전개)
+    // - 암기장에 없으면: 네이버 일본어 사전으로 이동
     box.addEventListener("click",ev=>{
       ev.stopPropagation();
-
-      if(anki && anki.explain){
-        // 암기박사 설명 토글
+      if(anki){
         if(kExplain.style.display==="none"){
           kExplain.style.display="block";
           kExplain.innerHTML = nl2br(anki.explain || "(설명 없음)");
@@ -629,20 +616,8 @@ async function openSubForToken(tok){
           kExplain.style.display="none";
           kExplain.innerHTML="";
         }
-      }else if(db){
-        // 일반 DB만 있는 케이스: 음/훈을 kExplain에 토글
-        const yomi=(db["음"]||"").toString().trim();
-        const hun =(db["훈"]||"").toString().trim();
-        const combo=[yomi, hun].filter(Boolean).join(" · ");
-        if(kExplain.style.display==="none"){
-          kExplain.style.display="block";
-          kExplain.innerHTML = nl2br(combo || "(정보 없음)");
-        }else{
-          kExplain.style.display="none";
-          kExplain.innerHTML="";
-        }
       }else{
-        // DB 없음 → 일본어 사전
+        // anki에 없으면 그냥 일본어 사전으로
         openNaverJaLemma(ch);
       }
     });
@@ -650,16 +625,11 @@ async function openSubForToken(tok){
     kwrapDiv.appendChild(box);
   }
 
-  // 한자 박스까지 반영됐으니 다시 위치 다듬어줌
+  // 최종적으로 내용까지 다 들어간 뒤 위치 다시 조정
   placeSubNearMain();
 }
 
-// 서브팝업 닫기 버튼
-subClose.onclick = ()=>{
-  sub.hidden=true;
-};
-
-// 메인 팝업 기준으로 서브팝업 붙이기
+// 메인 팝업 우하단 대각선 쪽에 서브팝업을 놓되, 겹치지 않도록
 function placeSubNearMain(){
   if(sub.hidden) return;
 
@@ -668,21 +638,22 @@ function placeSubNearMain(){
   const sr=sub.getBoundingClientRect();
   const gap=8;
 
-  // 기본: 메인팝업 우하단 살짝 옆
-  let left = pr.right - sr.width;
+  // 항상 메인팝업 우하단 대각선 기준
+  let left = pr.right + gap;
   let top  = pr.bottom + gap;
 
-  // 화면 아래로 넘치면 위로 올림
+  // 뷰포트에서 너무 밖으로 나가면 살짝 안으로만 밀어준다
   if(top + sr.height > vb.offsetTop + vb.height - 8){
-    top = pr.top - sr.height - gap;
+    top = vb.offsetTop + vb.height - sr.height - 8;
   }
-  // 오른쪽으로 튀어나가면 안쪽으로
   if(left + sr.width > vb.offsetLeft + vb.width - 8){
     left = vb.offsetLeft + vb.width - sr.width - 8;
   }
-  // 왼쪽으로 너무 붙으면 최소 8px
   if(left < vb.offsetLeft + 8){
     left = vb.offsetLeft + 8;
+  }
+  if(top < vb.offsetTop + 8){
+    top = vb.offsetTop + 8;
   }
 
   Object.assign(sub.style,{
@@ -697,8 +668,10 @@ function relayout(){
 
   if(currentAnchor && !pop.hidden){
     if(currentDir){
+      // 현재 방향 유지해서 재배치
       applyDir(currentDir);
     }else{
+      // 아직 방향 고정 전이면 기본 알고리즘
       placeMainPopover(currentAnchor, pop, 8);
       ensureDock();
       updateArrowEnablement();
@@ -714,10 +687,10 @@ window.addEventListener("resize", relayout,{passive:true});
 globalThis.visualViewport?.addEventListener("resize", relayout,{passive:true});
 window.addEventListener("scroll", relayout,{passive:true});
 
-// ===== 바깥 터치 시 서브팝업만 닫기 =====
+// ===== 바깥 탭 시 서브팝업만 닫기 =====
 stage.addEventListener("click",e=>{
   if(!sub.hidden && !sub.contains(e.target)){
     sub.hidden=true;
   }
-  // 메인 팝업은 dock의 ✕로만 닫음
+  // 메인 팝업 닫기는 dock의 ✕로만
 },{capture:false});
