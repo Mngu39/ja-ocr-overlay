@@ -1,4 +1,4 @@
-// 안정 동작판 + 우측 분할/슬라이더/Anki 우선/사전 이동/줄바꿈 보존
+// 안정 동작판 + 오류가 나면 화면에 즉시 노출 (이미지 로딩 라인은 절대진리로 유지)
 import { getImageById, gcvOCR, getFurigana, translateJaKo, openNaverJaLemma } from "./api.js";
 import { placeMainPopover } from "./place.js";
 
@@ -23,7 +23,7 @@ const expBack   = document.getElementById("expBack");
 const expKanji  = document.getElementById("expKanji");
 const expText   = document.getElementById("expText");
 
-// 선택
+// 선택 상태
 let annos = [];
 let selected = [];         // [{el,text}]
 let currentAnchor = null;  // 항상 "첫번째"
@@ -60,7 +60,7 @@ async function loadDBs(){
       }
     }
     ANKI = map;
-  }catch(e){ console.warn("DB load fail", e); }
+  }catch(e){ exposeError("DB 로드 오류", e); }
 }
 const DB_READY = loadDBs();
 
@@ -75,26 +75,43 @@ function quotaKey(){ const d=new Date(); return `gcv_quota_${d.getFullYear()}${S
 function tryConsumeQuota(){ const k=quotaKey(); const n=+(localStorage.getItem(k)||0); if(n>=1000) return{ok:false,key:k,n}; localStorage.setItem(k, n+1); return{ok:true,key:k,n:n+1}; }
 function rollbackQuota(k){ const n=+(localStorage.getItem(k)||1); localStorage.setItem(k, Math.max(0,n-1)); }
 
+// ===== 전역 오류 표시 =====
+function exposeError(label, err){
+  try{
+    const msg = (err && (err.message || err.statusText)) ? `: ${err.message || err.statusText}` : "";
+    hint.textContent = `${label}${msg}`;
+  }catch(_){}
+}
+window.addEventListener("error", (e)=> exposeError("스크립트 오류", e.error||e.message));
+window.addEventListener("unhandledrejection", (e)=> exposeError("비동기 오류", e.reason));
+
 // ===== Bootstrap =====
+let BOOT_STARTED=false, BOOT_IMG_SET=false;
 (async function bootstrap(){
   try{
+    BOOT_STARTED = true;
+
     const qs=new URLSearchParams(location.search);
     const id=qs.get("id");
     if(!id) throw new Error("?id= 필요");
 
     imgEl.onload = async ()=>{
-      const q=tryConsumeQuota(); if(!q.ok){ hint.textContent="월간 무료 사용량 초과"; return; }
       try{
+        const q=tryConsumeQuota(); if(!q.ok){ hint.textContent="월간 무료 사용량 초과"; return; }
         hint.textContent="OCR(Google) 중…";
         annos = await gcvOCR(id);
         if(!annos.length){ hint.textContent="문장을 찾지 못했습니다."; return; }
         hint.textContent="문장상자를 탭하세요";
         renderOverlay();
-      }catch(e){ rollbackQuota(q.key); console.error(e); hint.textContent="OCR 오류"; }
+      }catch(e){ exposeError("OCR 호출 오류", e); }
     };
     imgEl.onerror = ()=>{ hint.textContent="이미지를 불러오지 못했습니다"; };
-    imgEl.src = (await getImageById(id)) + `&t=${Date.now()}`;  // 절대진리
-  }catch(e){ hint.textContent=e.message; }
+
+    const url = await getImageById(id);
+    if(!url || typeof url!=="string"){ throw new Error("이미지 URL이 비어 있음"); }
+    imgEl.src = url + `&t=${Date.now()}`;  // 절대진리
+    BOOT_IMG_SET = true;
+  }catch(e){ exposeError("부트스트랩 실패", e); }
 })();
 
 // ===== Overlay =====
@@ -190,8 +207,7 @@ async function openMainPopover(anchor, text){
 
     requestAnimationFrame(()=>{ placeMainPopover(anchor, pop, 8); updateArrowEnablement(); ensureSideDock(); });
   }catch(e){
-    console.error(e);
-    transLine.textContent="(번역 실패)";
+    exposeError("루비/번역 렌더 오류", e);
   }
 }
 
@@ -199,7 +215,6 @@ async function openMainPopover(anchor, text){
 async function renderRightForToken(tok){
   if (!tok){ showTokenHeader(false); showKanjiCarousel([]); hideExplain(); return; }
 
-  // 헤더(루비+lemma 한 줄) + 번역
   const read = tok.reading ? `<rt>${esc(tok.reading)}</rt>` : "";
   tokLink.innerHTML = hasKanji(tok.surface) && tok.reading
     ? `<ruby>${esc(tok.surface)}${read}</ruby> <span class="lemma">(${esc(tok.lemma)})</span>`
@@ -244,14 +259,12 @@ function showKanjiCarousel(list){
     btn.addEventListener("click",(e)=>{
       e.stopPropagation();
       if (anki){
-        // Anki에 있으면 설명 모드
         expKanji.textContent = ch;
         expText.innerHTML = esc(anki.explain||"").replace(/\r?\n/g,"<br>");
         explainV.hidden = false;
         tokHeader.style.display="none";
         kCarousel.hidden=true;
       }else{
-        // Anki에 없고 일반DB에만 있든 없든 → 네이버 일본어사전
         openNaverJaLemma(ch);
       }
     });
@@ -273,7 +286,7 @@ function hideExplain(){
   explainV.hidden = true;
   if (kanjiList.length){ tokHeader.style.display="flex"; kCarousel.hidden=false; }
 }
-expBack?.addEventListener("click",(e)=>{ e.stopPropagation(); hideExplain(); });
+document.getElementById("expBack")?.addEventListener("click",(e)=>{ e.stopPropagation(); hideExplain(); });
 
 // ===== 사이드 도킹 아이콘(✕ / ✎) =====
 function ensureSideDock(){
