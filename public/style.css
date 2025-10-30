@@ -3,7 +3,8 @@
   --box:#4da3ff; --box-active:#00d4ff; --pop:#141417; --border:#2a2a31;
 }
 *{ box-sizing:border-box; }
-html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+html,body{
+  margin:0; height:100%; background:var(--bg); color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
     "Apple SD Gothic Neo","Noto Sans JP","Noto Sans KR","Malgun Gothic",sans-serif;
 }
@@ -19,8 +20,7 @@ html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
 
 /* 팝업 */
 .popover{ position:absolute; max-width:min(92vw, 980px); background:var(--pop); color:var(--ink);
-  border:1px solid var(--border); border-radius:14px; padding:10px 12px 12px;
-  box-shadow:0 12px 40px rgba(0,0,0,.5); z-index:50; }
+  border:1px solid var(--border); border-radius:14px; padding:10px 12px 12px; box-shadow:0 12px 40px rgba(0,0,0,.5); z-index:50; }
 .pop-head{ display:flex; align-items:center; justify-content:center; margin:2px 0 8px; }
 .drag-handle{ width:140px; height:6px; border-radius:4px; background:#2a2f3b; opacity:.7; }
 
@@ -29,7 +29,7 @@ html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
 .col.left{ flex:1 1 360px; min-width:280px; }
 .col.right{ flex:0 0 300px; min-width:260px; max-width:360px; max-height:100%; overflow:auto; }
 
-/* 루비/번역 (왼쪽) */
+/* 왼쪽(루비/번역) */
 .sep{ border:none; border-top:1px solid var(--border); margin:8px 0; }
 .ruby-line{ line-height:1.85; font-size:18px; color:#cfd4ff; word-break:break-word; }
 .ruby-line ruby{ ruby-position:over; ruby-align:center; }
@@ -38,13 +38,13 @@ html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
 .tok:hover{ background:#1f2433; cursor:pointer; }
 .trans-line{ font-size:18px; line-height:1.7; color:#e7f6ff; word-break:break-word; }
 
-/* 오른쪽: 토큰 헤더 */
-.tok-header{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+/* 오른쪽(토큰 헤더) */
+.tok-header{ display:flex; align-items:baseline; gap:10px; margin-bottom:6px; flex-wrap:wrap; }
 .tok-link{ color:#9bd1ff; text-decoration:underline; font-weight:800; font-size:16px; white-space:nowrap; }
 .tok-link rt{ font-size:10px; color:#b7c9ff; }
 .tok-trans{ font-size:14px; opacity:.95; }
 
-/* 한자 카루셀 */
+/* 한자 카루셀: 한 번에 1개 */
 .kcarousel{ display:flex; align-items:center; gap:8px; }
 .knav{ background:#2c3344; color:#dfe9ff; border:none; border-radius:8px; width:28px; height:28px; font-weight:900; cursor:pointer; }
 .kviewport{ overflow:hidden; flex:1; }
@@ -54,12 +54,12 @@ html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
 .kbtn.anki{ background:#2d3b29; color:#e8f6e8; }
 .kbtn small{ font-weight:700; opacity:.9; margin-left:6px; }
 
-/* 설명 뷰 */
+/* 설명 뷰(줄바꿈 보존) */
 .explain-head{ display:flex; align-items:center; gap:8px; margin:10px 0 6px; }
 .back{ background:#2c3344; color:#e5edff; border:none; border-radius:8px; width:28px; height:28px; cursor:pointer; }
-.explain-body{ font-size:14px; line-height:1.6; white-space:pre-wrap; } /* 줄바꿈 보존 */
+.explain-body{ font-size:14px; line-height:1.6; white-space:pre-wrap; }
 
-/* 방향바(팝업 이동) */
+/* 방향바(점프) */
 .arrow-bar{ position:absolute; opacity:.55; background:#2b2f3a; border-radius:6px; cursor:pointer; }
 .arrow-top, .arrow-bottom{ height:8px; left:10%; right:10%; }
 .arrow-top{ top:-12px; } .arrow-bottom{ bottom:-12px; }
@@ -69,11 +69,11 @@ html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
 .arrow-bar.disabled{ opacity:.25; cursor:not-allowed;
   background:repeating-linear-gradient(45deg,#333,#333 6px,#3b3b3b 6px,#3b3b3b 12px); }
 
-/* 버튼/다이얼로그 */
+/* 버튼/다이얼로그/아이콘도킹 */
 .btn{ background:var(--accent); color:#021323; border:none; padding:8px 12px; border-radius:10px; font-weight:600; cursor:pointer; }
 .btn.ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); }
 dialog{ border:none; border-radius:12px; background:var(--pop); color:var(--ink); }
 .edit-form{ display:flex; flex-direction:column; gap:8px; min-width:min(86vw, 560px); }
-textarea{ width:100%; background:#11121a; color:var(--ink); border:1px solid var(--border); border-radius:10px; padding:8px; font-size:16px; }
+textarea{ width:100%; background:#11121a; color:#fff; border:1px solid var(--border); border-radius:10px; padding:8px; font-size:16px; }
 
 img, .box, .popover{ -webkit-user-select:none; user-select:none; }
