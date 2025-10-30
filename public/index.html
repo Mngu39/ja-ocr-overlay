@@ -69,9 +69,27 @@
     </dialog>
   </main>
 
-  <script type="module" src="../src/app.js"
-          onerror="document.getElementById('hint').textContent='스크립트를 불러오지 못했습니다(경로 확인 필요)';">
+  <script type="module">
+    const hintEl = document.getElementById('hint');
+    const candidates = [
+      '../src/app.js',  // index.html이 /public 아래 있을 때
+      './src/app.js',   // index.html이 루트로 배포될 때
+      '/src/app.js'     // 혹시 절대경로 배포 케이스
+    ];
+
+    (async () => {
+      for (const p of candidates) {
+        try {
+          await import(p);
+          return; // 성공하면 종료
+        } catch (e) {
+          // 다음 후보 시도
+        }
+      }
+      hintEl.textContent = '스크립트를 불러오지 못했습니다: src/app.js 경로를 확인하세요';
+    })();
   </script>
+
 
 </body>
 </html>
