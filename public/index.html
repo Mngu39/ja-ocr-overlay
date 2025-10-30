@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JA OCR Overlay</title>
+  <!-- style.css는 /public 옆에 있다고 가정 -->
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -12,51 +13,31 @@
     <div id="overlay"></div>
     <div id="hint">이미지 불러오는 중…</div>
 
-    <!-- 메인 팝업: 좌(문장/번역) · 우(토큰/한자) -->
+    <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
+      <!-- 상단 드래그 핸들 + 우측 액션 -->
       <div class="pop-head">
         <div id="popDrag" class="drag-handle" title="드래그해서 이동"></div>
-      </div>
-
-      <div class="pop-body">
-        <!-- 왼쪽 -->
-        <div class="col left">
-          <div id="rubyLine" class="ruby-line">…</div>
-          <hr class="sep" />
-          <div id="transLine" class="trans-line">…</div>
-        </div>
-
-        <!-- 오른쪽 -->
-        <div class="col right" id="rightPane">
-          <div id="tokHeader" class="tok-header" style="display:none">
-            <a id="tokLink" class="tok-link" target="_blank" rel="noopener">—</a>
-            <span id="tokTrans" class="tok-trans"></span>
-          </div>
-
-          <div id="kanjiCarousel" class="kcarousel" hidden>
-            <button class="knav knav-left" title="이전">‹</button>
-            <div class="kviewport"><div class="ktrack" id="kTrack"></div></div>
-            <button class="knav knav-right" title="다음">›</button>
-          </div>
-
-          <div id="explainView" class="explain" hidden>
-            <div class="explain-head">
-              <button id="expBack" class="back" title="뒤로">←</button>
-              <strong id="expKanji"></strong>
-            </div>
-            <div id="expText" class="explain-body"></div>
-          </div>
+        <div class="pop-actions">
+          <button id="btnEdit" class="btn sm" title="원문 수정">수정</button>
+          <button id="btnClose" class="btn sm ghost" title="닫기">닫기</button>
         </div>
       </div>
 
-      <!-- 얇고 긴 방향바(점프) -->
-      <div class="arrow-bar arrow-top"    data-dir="top"    title="위로"></div>
-      <div class="arrow-bar arrow-bottom" data-dir="bottom" title="아래로"></div>
-      <div class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로"></div>
-      <div class="arrow-bar arrow-right"  data-dir="right"  title="오른쪽으로"></div>
+      <!-- 원문(루비) 한 줄 -->
+      <div id="rubyLine" class="ruby-line">…</div>
+      <hr class="sep" />
+      <!-- 번역 -->
+      <div id="transLine" class="trans-line">…</div>
+
+      <!-- 얇고 긴 방향바(팝업 외곽) -->
+      <div class="arrow-bar arrow-top"    data-dir="top"    title="위로 정렬"></div>
+      <div class="arrow-bar arrow-bottom" data-dir="bottom" title="아래로 정렬"></div>
+      <div class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로 정렬"></div>
+      <div class="arrow-bar arrow-right"  data-dir="right"  title="오른쪽으로 정렬"></div>
     </div>
 
-    <!-- 수정 다이얼로그(버튼은 사이드도킹 아이콘에서 호출) -->
+    <!-- 수정 다이얼로그 -->
     <dialog id="editDlg">
       <form method="dialog" class="edit-form">
         <label>원문 수정</label>
@@ -67,21 +48,35 @@
         </menu>
       </form>
     </dialog>
+
+    <!-- 서브 팝업 -->
+    <div id="sub" class="subpop" hidden>
+      <div class="sub-head">
+        <div id="subDrag" class="drag-handle small" title="드래그해서 이동"></div>
+        <span id="subTitle"></span>
+      </div>
+      <div id="subBody"></div>
+    </div>
   </main>
 
+  <!-- 모듈 로더: /public 배포/루트 배포/리포 경로(ja-ocr-overlay) 모두 커버 -->
   <script type="module">
     const hintEl = document.getElementById('hint');
+
+    // 현재 문서 URL 기준으로 후보 경로를 생성
+    const here = new URL(location.href);
     const candidates = [
-      '../src/app.js',  // index.html이 /public 아래 있을 때
-      './src/app.js',   // index.html이 루트로 배포될 때
-      '/src/app.js'     // 혹시 절대경로 배포 케이스
+      new URL('../src/app.js', here),                 // /public/index.html → ../src/app.js
+      new URL('./src/app.js', here),                  // 루트에 index.html과 src/가 같이 있을 때
+      new URL('/ja-ocr-overlay/src/app.js', here),    // GitHub Pages 리포 경로
+      new URL('/src/app.js', here)                    // 사용자 페이지(도메인 루트) 배포
     ];
 
     (async () => {
-      for (const p of candidates) {
+      for (const u of candidates) {
         try {
-          await import(p);
-          return; // 성공하면 종료
+          await import(u.href);
+          return;
         } catch (e) {
           // 다음 후보 시도
         }
@@ -89,7 +84,5 @@
       hintEl.textContent = '스크립트를 불러오지 못했습니다: src/app.js 경로를 확인하세요';
     })();
   </script>
-
-
 </body>
 </html>
