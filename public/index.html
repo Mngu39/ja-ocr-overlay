@@ -69,6 +69,9 @@
     </dialog>
   </main>
 
-  <script type="module" src="./src/app.js"></script>
+  <script type="module" src="../src/app.js"
+          onerror="document.getElementById('hint').textContent='스크립트를 불러오지 못했습니다(경로 확인 필요)';">
+  </script>
+
 </body>
 </html>
