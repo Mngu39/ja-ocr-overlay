@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>JA OCR Overlay</title>
-  <!-- style.css는 /public 옆에 있다고 가정 -->
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -15,7 +14,6 @@
 
     <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
-      <!-- 상단 드래그 핸들 + 우측 액션 -->
       <div class="pop-head">
         <div id="popDrag" class="drag-handle" title="드래그해서 이동"></div>
         <div class="pop-actions">
@@ -24,13 +22,10 @@
         </div>
       </div>
 
-      <!-- 원문(루비) 한 줄 -->
       <div id="rubyLine" class="ruby-line">…</div>
       <hr class="sep" />
-      <!-- 번역 -->
       <div id="transLine" class="trans-line">…</div>
 
-      <!-- 얇고 긴 방향바(팝업 외곽) -->
       <div class="arrow-bar arrow-top"    data-dir="top"    title="위로 정렬"></div>
       <div class="arrow-bar arrow-bottom" data-dir="bottom" title="아래로 정렬"></div>
       <div class="arrow-bar arrow-left"   data-dir="left"   title="왼쪽으로 정렬"></div>
@@ -59,30 +54,7 @@
     </div>
   </main>
 
-  <!-- 모듈 로더: /public 배포/루트 배포/리포 경로(ja-ocr-overlay) 모두 커버 -->
-  <script type="module">
-    const hintEl = document.getElementById('hint');
-
-    // 현재 문서 URL 기준으로 후보 경로를 생성
-    const here = new URL(location.href);
-    const candidates = [
-      new URL('../src/app.js', here),                 // /public/index.html → ../src/app.js
-      new URL('./src/app.js', here),                  // 루트에 index.html과 src/가 같이 있을 때
-      new URL('/ja-ocr-overlay/src/app.js', here),    // GitHub Pages 리포 경로
-      new URL('/src/app.js', here)                    // 사용자 페이지(도메인 루트) 배포
-    ];
-
-    (async () => {
-      for (const u of candidates) {
-        try {
-          await import(u.href);
-          return;
-        } catch (e) {
-          // 다음 후보 시도
-        }
-      }
-      hintEl.textContent = '스크립트를 불러오지 못했습니다: src/app.js 경로를 확인하세요';
-    })();
-  </script>
+  <!-- ★ 중요: index.html이 /public에 있을 때는 ../src/app.js -->
+  <script type="module" src="../src/app.js"></script>
 </body>
 </html>
