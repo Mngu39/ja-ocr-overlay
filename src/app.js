@@ -1,117 +1,101 @@
-// 안정 동작판 + 오류가 나면 화면에 즉시 노출 (이미지 로딩 라인은 절대진리로 유지)
+// 통합 팝업 버전. "이미지 로딩 루틴"은 절대 수정하지 않음.
 import { getImageById, gcvOCR, getFurigana, translateJaKo, openNaverJaLemma } from "./api.js";
 import { placeMainPopover } from "./place.js";
 
+const stage   = document.getElementById("stage");
 const imgEl   = document.getElementById("img");
 const overlay = document.getElementById("overlay");
 const hint    = document.getElementById("hint");
-const pop     = document.getElementById("pop");
+
+const pop       = document.getElementById("pop");
 const rubyLine  = document.getElementById("rubyLine");
 const transLine = document.getElementById("transLine");
 const popDrag   = document.getElementById("popDrag");
 
-// 우측 패널
 const tokHeader = document.getElementById("tokHeader");
-const tokLink   = document.getElementById("tokLink");
-const tokTrans  = document.getElementById("tokTrans");
-const kCarousel = document.getElementById("kanjiCarousel");
-const kTrack    = document.getElementById("kTrack");
-const knavL     = document.querySelector(".knav-left");
-const knavR     = document.querySelector(".knav-right");
-const explainV  = document.getElementById("explainView");
-const expBack   = document.getElementById("expBack");
-const expKanji  = document.getElementById("expKanji");
-const expText   = document.getElementById("expText");
+const kcarousel = document.getElementById("kcarousel");
+const kviewport = document.getElementById("kviewport");
+const ktrack    = document.getElementById("ktrack");
+const kprev     = document.getElementById("kprev");
+const knext     = document.getElementById("knext");
+const kExplain  = document.getElementById("kExplain");
 
 // 선택 상태
 let annos = [];
-let selected = [];         // [{el,text}]
-let currentAnchor = null;  // 항상 "첫번째"
-let currentTokens = [];
-let activeToken = null;
-let kanjiList = [];
-let kIndex = 0;
+let selected = [];        // [{el,text}]
+let currentAnchor = null; // 항상 "첫 번째" 박스
+let currentToken = null;
 
-// ===== DB =====
-let KANJI = {}, ANKI = {};
+// ===== Kanji DBs =====
+let KANJI = null;  // 일반 DB: { '漢': { '음': '...', '훈': '...', ... }, ... }
+let ANKI  = null;  // Anki DB:  { '漢': { mean:'...', explain:'...' }, ... }
+
 async function loadDBs(){
   try{
     const [j1, j2] = await Promise.allSettled([
-      fetch("./kanji_ko_attr_irreg.min.json").then(r=>r.ok?r.json():null),
-      fetch("./일본어_한자_암기박사/deck.json").then(r=>r.ok?r.json():null)
+      fetch("../public/kanji_ko_attr_irreg.min.json").then(r=>r.ok?r.json():null),
+      fetch("../public/일본어_한자_암기박사/deck.json").then(r=>r.ok?r.json():null)
     ]);
-    KANJI = j1.status==="fulfilled" && j1.value ? j1.value : {};
+    KANJI = j1.status==="fulfilled" ? (j1.value||{}) : {};
 
-    const map = {};
     if (j2.status==="fulfilled" && j2.value){
-      const stack=[j2.value];
-      while(stack.length){
-        const n=stack.pop();
-        if(Array.isArray(n?.children)) stack.push(...n.children);
-        if(Array.isArray(n?.notes)){
-          for(const note of n.notes){
-            const f = note?.fields || [];
+      const map = {};
+      const stack = [j2.value];
+      while (stack.length){
+        const node = stack.pop();
+        if (Array.isArray(node?.children)) stack.push(...node.children);
+        if (Array.isArray(node?.notes)){
+          for (const n of node.notes){
+            const f = n.fields || [];
             const ch = (f[1] ?? "").toString().trim();
             const mean = (f[2] ?? "").toString().replace(/<[^>]+>/g,"").trim();
             const explain = (f[3] ?? "").toString().replace(/<[^>]+>/g,"").trim();
-            if(ch && ch.length===1) map[ch] = { mean, explain };
+            if (ch && ch.length===1) map[ch] = { mean, explain };
           }
         }
       }
+      ANKI = map;
+    }else{
+      ANKI = {};
     }
-    ANKI = map;
-  }catch(e){ exposeError("DB 로드 오류", e); }
+  }catch{
+    KANJI = {}; ANKI = {};
+  }
 }
 const DB_READY = loadDBs();
 
 // ===== 유틸 =====
-const esc = s => (s||"").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
-const hasKanji = s => /[\u3400-\u9FFF]/.test(s||"");
+const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+const hasKanji   = s => /[\u3400-\u9FFF]/.test(s||"");
 const kataToHira = s => (s||"").replace(/[\u30a1-\u30f6]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
-const oneLine = s => (s||"").replace(/\r?\n+/g," · ").replace(/\s+/g," ").trim();
 
 // 월 1,000건 로컬 카운트
 function quotaKey(){ const d=new Date(); return `gcv_quota_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}`; }
 function tryConsumeQuota(){ const k=quotaKey(); const n=+(localStorage.getItem(k)||0); if(n>=1000) return{ok:false,key:k,n}; localStorage.setItem(k, n+1); return{ok:true,key:k,n:n+1}; }
 function rollbackQuota(k){ const n=+(localStorage.getItem(k)||1); localStorage.setItem(k, Math.max(0,n-1)); }
 
-// ===== 전역 오류 표시 =====
-function exposeError(label, err){
-  try{
-    const msg = (err && (err.message || err.statusText)) ? `: ${err.message || err.statusText}` : "";
-    hint.textContent = `${label}${msg}`;
-  }catch(_){}
-}
-window.addEventListener("error", (e)=> exposeError("스크립트 오류", e.error||e.message));
-window.addEventListener("unhandledrejection", (e)=> exposeError("비동기 오류", e.reason));
-
-// ===== Bootstrap =====
-let BOOT_STARTED=false, BOOT_IMG_SET=false;
+// ===== Bootstrap (이미지 → OCR) =====
+// ★★★ 절대 수정 금지: 이미지 로딩 루틴
 (async function bootstrap(){
   try{
-    BOOT_STARTED = true;
-
     const qs=new URLSearchParams(location.search);
     const id=qs.get("id");
     if(!id) throw new Error("?id= 필요");
 
     imgEl.onload = async ()=>{
+      const q=tryConsumeQuota(); if(!q.ok){ hint.textContent="월간 무료 사용량 초과"; return; }
       try{
-        const q=tryConsumeQuota(); if(!q.ok){ hint.textContent="월간 무료 사용량 초과"; return; }
         hint.textContent="OCR(Google) 중…";
         annos = await gcvOCR(id);
-        if(!annos.length){ hint.textContent="문장을 찾지 못했습니다."; return; }
+        if (!annos.length){ hint.textContent="문장을 찾지 못했습니다."; return; }
         hint.textContent="문장상자를 탭하세요";
         renderOverlay();
-      }catch(e){ exposeError("OCR 호출 오류", e); }
+      }catch(e){ rollbackQuota(q.key); console.error(e); hint.textContent="OCR 오류"; }
     };
     imgEl.onerror = ()=>{ hint.textContent="이미지를 불러오지 못했습니다"; };
 
-    const url = await getImageById(id);
-    if(!url || typeof url!=="string"){ throw new Error("이미지 URL이 비어 있음"); }
-    imgEl.src = url + `&t=${Date.now()}`;  // 절대진리
-    BOOT_IMG_SET = true;
-  }catch(e){ exposeError("부트스트랩 실패", e); }
+    imgEl.src = (await getImageById(id)) + `&t=${Date.now()}`; // 캐시 버스터
+  }catch(e){ hint.textContent=e.message; }
 })();
 
 // ===== Overlay =====
@@ -148,7 +132,7 @@ function toggleSelect(box){
   }
   renumber();
   if (selected.length){
-    currentAnchor = selected[0].el; // 항상 첫번째
+    currentAnchor = selected[0].el; // 첫 박스 고정
     openMainFromSelection();
   }else{
     pop.hidden=true;
@@ -163,213 +147,274 @@ function openMainFromSelection(){ openMainPopover(currentAnchor, selectedText())
 async function openMainPopover(anchor, text){
   pop.hidden=false;
 
+  // 폭: 앵커 대비
   const aw = anchor.getBoundingClientRect().width, overlayW = overlay.clientWidth;
-  pop.style.width = Math.min(Math.max(Math.round(aw*1.2), 540), Math.round(overlayW*0.92))+"px";
+  pop.style.width = Math.min(Math.max(Math.round(aw*1.1), 560), Math.round(overlayW*0.92))+"px";
   placeMainPopover(anchor, pop, 8);
 
-  // 좌 초기화
   rubyLine.innerHTML="…"; transLine.textContent="…";
-  // 우 초기화
-  showTokenHeader(false); showKanjiCarousel([]); hideExplain();
+  // 우측 패널 초기화(플레이스홀더)
+  currentToken = null;
+  renderRightPanelPlaceholder();
 
   try{
     const [rubi, tr] = await Promise.all([ getFurigana(text), translateJaKo(text) ]);
-    currentTokens = (rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes || []).map(t=>({
+
+    // 토큰 표준화
+    const tokens = (rubi?.tokens || rubi?.result || rubi?.morphs || rubi?.morphemes || []).map(t=>({
       surface: t.surface || t.text || "",
       reading: kataToHira(t.reading || t.read || t.kana || ""),
       lemma:   t.lemma || t.base || t.baseform || t.dict || (t.surface||t.text||"")
     })).filter(t=>t.surface);
 
-    rubyLine.innerHTML = currentTokens.map(t=>{
-      const surf=esc(t.surface), read=esc(t.reading||"");
-      const data = `data-surf="${surf}" data-lemma="${esc(t.lemma)}" data-read="${read}"`;
-      if (hasKanji(t.surface) && t.reading){
-        return `<span class="tok" ${data}><ruby>${surf}<rt>${read}</rt></ruby></span>`;
-      }
-      return `<span class="tok" ${data}>${surf}</span>`;
+    // 루비 렌더 + 클릭(우측 패널 채움)
+    rubyLine.innerHTML = tokens.map(t=>{
+      const surf=escapeHtml(t.surface), read=escapeHtml(t.reading||"");
+      const data = `data-surf="${surf}" data-lemma="${escapeHtml(t.lemma||t.surface)}" data-read="${read}"`;
+      return (hasKanji(t.surface) && t.reading)
+        ? `<span class="tok" ${data}><ruby>${surf}<rt>${read}</rt></ruby></span>`
+        : `<span class="tok" ${data}>${surf}</span>`;
     }).join("");
 
     rubyLine.querySelectorAll(".tok").forEach(span=>{
       span.addEventListener("click",(ev)=>{
         ev.stopPropagation();
-        const tok = { surface: span.dataset.surf||"", lemma: span.dataset.lemma||"", reading: span.dataset.read||"" };
-        activeToken = tok;
-        renderRightForToken(tok);
+        const tok = {
+          surface: span.dataset.surf || "",
+          lemma:   span.dataset.lemma || span.dataset.surf || "",
+          reading: span.dataset.read || ""
+        };
+        currentToken = tok;
+        renderRightPanelForToken(tok);
       });
     });
 
     const out = tr?.text || tr?.result || tr?.translation || "";
     transLine.textContent = out || "(번역 없음)";
-
-    // 기본 토큰
-    activeToken = currentTokens.find(t=>t.surface.trim()) || null;
-    renderRightForToken(activeToken);
-
-    requestAnimationFrame(()=>{ placeMainPopover(anchor, pop, 8); updateArrowEnablement(); ensureSideDock(); });
+    requestAnimationFrame(()=> updateArrowEnablement());
   }catch(e){
-    exposeError("루비/번역 렌더 오류", e);
+    console.error(e);
+    transLine.textContent="(번역 실패)";
   }
+
+  ensureSideDock(); // ✕/✎ 도킹
 }
 
-// ===== 우측 패널 =====
-async function renderRightForToken(tok){
-  if (!tok){ showTokenHeader(false); showKanjiCarousel([]); hideExplain(); return; }
+/* ===== 우측 패널 ===== */
+function renderRightPanelPlaceholder(){
+  tokHeader.innerHTML = `<span class="ph">형태소를 탭하면 상세가 여기에 표시됩니다</span>`;
+  ktrack.innerHTML = "";
+  kExplain.hidden = true;
+  setCarouselIndex(0, true);
+}
 
-  const read = tok.reading ? `<rt>${esc(tok.reading)}</rt>` : "";
-  tokLink.innerHTML = hasKanji(tok.surface) && tok.reading
-    ? `<ruby>${esc(tok.surface)}${read}</ruby> <span class="lemma">(${esc(tok.lemma)})</span>`
-    : `${esc(tok.surface)} <span class="lemma">(${esc(tok.lemma)})</span>`;
-  tokLink.href = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(tok.lemma||tok.surface)}`;
-  tokTrans.textContent = "…";
-  showTokenHeader(true);
+async function renderRightPanelForToken(tok){
+  // 헤더 한 줄: (루비 링크) (lemma) (번역)
+  const url = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(tok.lemma||tok.surface)}`;
+  const rubyHTML = (hasKanji(tok.surface) && tok.reading)
+    ? `<ruby>${escapeHtml(tok.surface)}<rt style="font-size:11px">${escapeHtml(tok.reading)}</rt></ruby>`
+    : escapeHtml(tok.surface);
 
+  tokHeader.innerHTML =
+    `<a href="${url}" target="_blank">${rubyHTML}</a>
+     <span class="lemma">(${escapeHtml(tok.lemma||tok.surface)})</span>
+     <span class="inline-tr" id="inlineTokTr">…</span>`;
+
+  // 단어 번역(헤더 옆)
   try{
-    const r = await translateJaKo(tok.lemma || tok.surface);
-    const t = r?.text || r?.result || r?.translation || "";
-    tokTrans.textContent = t || "(번역 없음)";
-  }catch{ tokTrans.textContent="(번역 실패)"; }
+    const r = await translateJaKo(tok.lemma||tok.surface);
+    const txt = r?.text || r?.result || r?.translation || "";
+    document.getElementById("inlineTokTr").textContent = txt || "";
+  }catch{
+    document.getElementById("inlineTokTr").textContent = "";
+  }
 
+  // 한자 슬라이더
   await DB_READY;
-  kanjiList = Array.from(new Set(Array.from(tok.surface).filter(ch=>hasKanji(ch))));
-  kIndex = 0;
-  showKanjiCarousel(kanjiList);
-  hideExplain();
-}
+  ktrack.innerHTML = "";
+  kExplain.hidden = true; kExplain.textContent = "";
 
-function showTokenHeader(show){
-  tokHeader.style.display = show ? "flex" : "none";
-  if(!show){ tokLink.removeAttribute("href"); tokLink.textContent="—"; tokTrans.textContent=""; }
-}
+  const uniq = Array.from(new Set(Array.from(tok.surface).filter(ch=>hasKanji(ch))));
+  const items = [];
 
-function showKanjiCarousel(list){
-  kTrack.innerHTML = "";
-  if (!list || list.length===0){ kCarousel.hidden=true; return; }
-  kCarousel.hidden=false;
-
-  list.forEach(ch=>{
+  for (const ch of uniq){
     const anki = ANKI?.[ch];
     const db   = KANJI?.[ch];
-    const gloss = anki ? (anki.mean||"")
-                       : db ? oneLine([db["음"], db["훈"]].filter(Boolean).join(" / ")) : "";
 
-    const btn = document.createElement("button");
-    btn.className = "kbtn" + (anki ? " anki" : "");
-    btn.innerHTML = `${esc(ch)}${gloss?`<small>${esc(gloss)}</small>`:""}`;
+    // 레이블: 한 줄 표기(글자 + mean/gloss)
+    const gloss = anki ? (anki.mean||"") : (db ? [db["음"], db["훈"]].filter(Boolean).join(" / ") : "");
+    const div = document.createElement("div");
+    div.className = "kitem " + (anki ? "anki" : "db");
+    div.innerHTML = `<span class="char">${escapeHtml(ch)}</span>${gloss?`<span class="gloss">${escapeHtml(gloss)}</span>`:""}`;
 
-    btn.addEventListener("click",(e)=>{
-      e.stopPropagation();
+    // 클릭 동작:
+    // - Anki 있으면: 설명 영역에 explain 표시(스크롤 가능, pre-line)
+    // - Anki 없고 KANJI만 있거나(=db), 또는 둘 다 없으면: 네이버 일본어사전으로 이동
+    div.addEventListener("click", ()=>{
       if (anki){
-        expKanji.textContent = ch;
-        expText.innerHTML = esc(anki.explain||"").replace(/\r?\n/g,"<br>");
-        explainV.hidden = false;
-        tokHeader.style.display="none";
-        kCarousel.hidden=true;
+        kExplain.hidden = false;
+        kExplain.textContent = anki.explain || "(설명 없음)";
       }else{
         openNaverJaLemma(ch);
       }
     });
 
-    const card = document.createElement("div");
-    card.className = "kcard";
-    card.appendChild(btn);
-    kTrack.appendChild(card);
+    ktrack.appendChild(div);
+    items.push(div);
+  }
+
+  // 슬라이더 구성(한 번에 1개씩 보이도록)
+  setCarouselIndex(0, true);
+  if (items.length <= 1){
+    kprev.disabled = true; knext.disabled = true;
+  }else{
+    kprev.disabled = false; knext.disabled = false;
+  }
+}
+
+/* ===== 카루셀 ===== */
+let kIndex = 0;
+function setCarouselIndex(idx, first=false){
+  const total = ktrack.children.length;
+  kIndex = Math.max(0, Math.min(idx, Math.max(0,total-1)));
+  const item = ktrack.children[kIndex];
+  if (!item){ ktrack.style.transform = "translateX(0)"; return; }
+
+  // 아이템 폭에 맞춰 한 개만 보이도록 중앙 정렬
+  const vw = kviewport.clientWidth;
+  const iw = Math.min(item.getBoundingClientRect().width, vw);
+  // 모든 item을 같은 폭으로 보이게 강제
+  Array.from(ktrack.children).forEach(el=> el.style.minWidth = iw+"px");
+  // 트랙 이동
+  const offset = Array.from(ktrack.children)
+    .slice(0, kIndex)
+    .reduce((acc,el)=> acc + el.getBoundingClientRect().width + 8 /*gap*/, 0);
+  ktrack.style.transform = `translateX(${-offset}px)`;
+
+  kprev.disabled = (kIndex===0);
+  knext.disabled = (kIndex>=total-1);
+}
+kprev.addEventListener("click", ()=> setCarouselIndex(kIndex-1));
+knext.addEventListener("click", ()=> setCarouselIndex(kIndex+1));
+
+/* ===== 방향바: 즉시 점프(첫 앵커 기준 상/하/좌/우) ===== */
+Array.from(pop.querySelectorAll(".arrow-bar")).forEach(b=>{
+  b.addEventListener("click",(e)=>{
+    e.stopPropagation();
+    if (b.classList.contains("disabled")) return;
+    jumpTo(b.dataset.dir);
   });
+});
 
-  updateKTrack();
+function vb(){ return (globalThis.visualViewport || { width:innerWidth, height:innerHeight, offsetTop:scrollY, offsetLeft:scrollX }); }
+
+function jumpTo(side){
+  if(!currentAnchor) return;
+  const a = currentAnchor.getBoundingClientRect();
+  const p = pop.getBoundingClientRect();
+  const gap = 8;
+  let x = p.left, y = p.top;
+
+  if (side==="top"){
+    x = a.left + (a.width - p.width)/2;
+    y = a.top - p.height - gap;
+  } else if (side==="bottom"){
+    x = a.left + (a.width - p.width)/2;
+    y = a.bottom + gap;
+  } else if (side==="left"){
+    x = a.left - p.width - gap;
+    y = a.top + (a.height - p.height)/2;
+  } else if (side==="right"){
+    x = a.right + gap;
+    y = a.top + (a.height - p.height)/2;
+  }
+
+  const v = vb();
+  const minX = v.offsetLeft + 4, maxX = v.offsetLeft + v.width - p.width - 4;
+  const minY = v.offsetTop + 4,  maxY = v.offsetTop + v.height - p.height - 4;
+  x = Math.max(minX, Math.min(x, maxX));
+  y = Math.max(minY, Math.min(y, maxY));
+
+  pop.style.left = (x + window.scrollX) + "px";
+  pop.style.top  = (y + window.scrollY) + "px";
+
+  updateArrowEnablement();
 }
 
-knavL?.addEventListener("click",(e)=>{ e.stopPropagation(); if(kanjiList.length){ kIndex=(kIndex-1+kanjiList.length)%kanjiList.length; updateKTrack(); }});
-knavR?.addEventListener("click",(e)=>{ e.stopPropagation(); if(kanjiList.length){ kIndex=(kIndex+1)%kanjiList.length; updateKTrack(); }});
-function updateKTrack(){ kTrack.style.transform = `translateX(${-kIndex*100}%)`; }
+function willFit(side){
+  if(!currentAnchor) return false;
+  const a = currentAnchor.getBoundingClientRect();
+  const p = pop.getBoundingClientRect();
+  const v = vb(); const gap=8;
 
-function hideExplain(){
-  explainV.hidden = true;
-  if (kanjiList.length){ tokHeader.style.display="flex"; kCarousel.hidden=false; }
+  let x=0,y=0;
+  if (side==="top"){    x=a.left+(a.width-p.width)/2; y=a.top-p.height-gap; }
+  if (side==="bottom"){ x=a.left+(a.width-p.width)/2; y=a.bottom+gap; }
+  if (side==="left"){   x=a.left-p.width-gap;         y=a.top+(a.height-p.height)/2; }
+  if (side==="right"){  x=a.right+gap;                y=a.top+(a.height-p.height)/2; }
+
+  return (x >= v.offsetLeft) &&
+         (y >= v.offsetTop) &&
+         (x + p.width  <= v.offsetLeft + v.width) &&
+         (y + p.height <= v.offsetTop  + v.height);
 }
-document.getElementById("expBack")?.addEventListener("click",(e)=>{ e.stopPropagation(); hideExplain(); });
 
-// ===== 사이드 도킹 아이콘(✕ / ✎) =====
+function updateArrowEnablement(){
+  pop.querySelector(".arrow-top")   .classList.toggle("disabled", !willFit("top"));
+  pop.querySelector(".arrow-bottom").classList.toggle("disabled", !willFit("bottom"));
+  pop.querySelector(".arrow-left")  .classList.toggle("disabled", !willFit("left"));
+  pop.querySelector(".arrow-right") .classList.toggle("disabled", !willFit("right"));
+}
+
+/* ===== 도킹 버튼(✎/✕) ===== */
 function ensureSideDock(){
   if (pop.querySelector(".dock")) return;
   const dock = document.createElement("div");
   dock.className="dock";
   Object.assign(dock.style,{
     position:"absolute", right:"-44px", top:"8px", width:"36px",
-    display:"flex", flexDirection:"column", gap:"10px", zIndex:"2"
+    display:"flex", flexDirection:"column", gap:"10px", zIndex:"3"
   });
   const mk = (label, handler)=> {
     const b=document.createElement("button");
-    b.textContent=label; b.className="btn";
-    Object.assign(b.style,{ width:"36px", height:"36px", borderRadius:"18px", padding:"0" });
+    b.textContent=label;
+    Object.assign(b.style,{
+      width:"36px", height:"36px", borderRadius:"18px",
+      background:"#4da3ff", color:"#021323", fontWeight:"700",
+      border:"none", cursor:"pointer"
+    });
     b.addEventListener("click",(e)=>{ e.stopPropagation(); handler(); });
     return b;
   };
-  dock.appendChild(mk("✕", ()=>{ pop.hidden=true; selected.forEach(it=>{ it.el.classList.remove("selected"); it.el.querySelector(".ord")?.remove(); }); selected=[]; }));
-  dock.appendChild(mk("✎", ()=>{ const t=selectedText(); const dlg=document.getElementById("editDlg"); const input=document.getElementById("editInput"); input.value=t; dlg.showModal(); }));
+  // ✕ 닫기
+  dock.appendChild(mk("✕", ()=>{
+    pop.hidden = true;
+    selected.forEach(it=>{ it.el.classList.remove("selected"); it.el.querySelector(".ord")?.remove(); });
+    selected = [];
+  }));
+  // ✎ 수정
+  dock.appendChild(mk("✎", ()=>{
+    const editDlg = document.getElementById("editDlg");
+    const editInput = document.getElementById("editInput");
+    editInput.value = selectedText() || "";
+    editDlg.showModal();
+  }));
   pop.appendChild(dock);
-}
-document.getElementById("editOk").addEventListener("click", ()=>{
-  const dlg=document.getElementById("editDlg");
-  const input=document.getElementById("editInput");
-  const t=input.value.trim(); if(!t){ dlg.close(); return; }
-  dlg.close(); openMainPopover(currentAnchor, t);
-});
 
-// ===== 방향바(점프: 첫번째 박스 기준) =====
-const bars = Array.from(pop.querySelectorAll(".arrow-bar"));
-bars.forEach(b=>{ b.addEventListener("click",(e)=>{ e.stopPropagation(); if (b.classList.contains("disabled")) return; jumpTo(b.dataset.dir); }); });
-
-function jumpTo(dir){
-  if(!currentAnchor) return;
-  const a = currentAnchor.getBoundingClientRect();
-  const r = pop.getBoundingClientRect();
-  const m = 8;
-  let left = r.left, top = r.top;
-  if (dir==="top"){    left = a.left + (a.width - r.width)/2; top = a.top - r.height - m; }
-  if (dir==="bottom"){ left = a.left + (a.width - r.width)/2; top = a.bottom + m; }
-  if (dir==="left"){   left = a.left - r.width - m;           top = a.top + (a.height - r.height)/2; }
-  if (dir==="right"){  left = a.right + m;                    top = a.top + (a.height - r.height)/2; }
-  pop.style.left = (left + window.scrollX) + "px";
-  pop.style.top  = (top  + window.scrollY) + "px";
-  updateArrowEnablement();
+  // 저장 버튼 훅
+  document.getElementById("editOk").onclick = ()=>{
+    const editDlg = document.getElementById("editDlg");
+    const editInput = document.getElementById("editInput");
+    const t = (editInput.value||"").trim();
+    editDlg.close();
+    if(t) openMainPopover(currentAnchor, t);
+  };
 }
 
-function vb(){ return (globalThis.visualViewport || { width:innerWidth, height:innerHeight, offsetTop:scrollY, offsetLeft:scrollX }); }
-function updateArrowEnablement(){
-  const r = pop.getBoundingClientRect(), v = vb(), m = 8;
-  const canTop    = (r.top - m)    >= v.offsetTop;
-  const canBottom = (r.bottom + m) <= (v.offsetTop + v.height);
-  const canLeft   = (r.left - m)   >= v.offsetLeft;
-  const canRight  = (r.right + m)  <= (v.offsetLeft + v.width);
-  pop.querySelector(".arrow-top")   .classList.toggle("disabled", !canTop);
-  pop.querySelector(".arrow-bottom").classList.toggle("disabled", !canBottom);
-  pop.querySelector(".arrow-left")  .classList.toggle("disabled", !canLeft);
-  pop.querySelector(".arrow-right") .classList.toggle("disabled", !canRight);
-}
-
-// ===== 드래그 =====
-makeDraggable(pop, popDrag);
-function makeDraggable(panel, handle){
-  if(!panel || !handle) return;
-  let sx=0, sy=0, sl=0, st=0, dragging=false;
-  handle.addEventListener("pointerdown",(e)=>{
-    dragging=true; handle.setPointerCapture(e.pointerId);
-    const r=panel.getBoundingClientRect(); sx=e.clientX; sy=e.clientY; sl=r.left+scrollX; st=r.top+scrollY;
-  });
-  handle.addEventListener("pointermove",(e)=>{
-    if(!dragging) return;
-    const dx=e.clientX-sx, dy=e.clientY-sy;
-    panel.style.left=(sl+dx)+"px"; panel.style.top=(st+dy)+"px";
-    updateArrowEnablement();
-  });
-  handle.addEventListener("pointerup",()=>{ dragging=false; });
-}
-
-// ===== 리레이아웃 =====
+/* ===== 리레이아웃 ===== */
 function relayout(){
   renderOverlay();
-  if(currentAnchor && !pop.hidden) placeMainPopover(currentAnchor, pop, 8);
-  if(!pop.hidden) updateArrowEnablement();
+  if(currentAnchor && !pop.hidden) { placeMainPopover(currentAnchor, pop, 8); updateArrowEnablement(); }
 }
 addEventListener("resize", relayout, {passive:true});
 globalThis.visualViewport?.addEventListener("resize", relayout, {passive:true});
