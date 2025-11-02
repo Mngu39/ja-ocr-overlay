@@ -1,6 +1,3 @@
-;
-// === /DEBUG ===
-
 import {
   getImageById,
   gcvOCR,
@@ -82,28 +79,6 @@ async function loadDBs(){
   }
 }
 const DB_READY = loadDBs();
-
-// === Kanji helpers ===
-function isKnownKanjiChar(ch){
-  if(!hasKanji(ch) || (ch||"").length!==1) return true;
-  try{
-    return !!(ANKI && ANKI[ch]) && !!(KANJI && KANJI[ch]);
-  }catch(_){
-    return false;
-  }
-}
-function firstUnknownKanjiIn(s){
-  if(!s) return null;
-  for(const ch of s){
-    if(hasKanji(ch) && !isKnownKanjiChar(ch)) return ch;
-  }
-  return null;
-}
-function openNaverJa(term){
-  const url = `https://ja.dict.naver.com/#/search?query=${encodeURIComponent(term||"")}`;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
 
 // ===== 유틸 =====
 const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({
@@ -546,7 +521,6 @@ Array.from(pop.querySelectorAll(".arrow-bar")).forEach(bar=>{
 
 // ===== 서브팝업 =====
 async function openSubForToken(tok){
-  try{ const u = firstUnknownKanjiIn(tok && tok.surface); if(u){ openNaverJa(u); return; } }catch(_){ }
   currentTokenObj = tok;
 
   const surface = tok.surface || "";
