@@ -1,3 +1,46 @@
+
+// === DEBUG INSTRUMENTATION (non-invasive) ===
+(function(){
+  function setStatusError(msg){
+    try {
+      var el = document.querySelector('#image-status') || document.querySelector('#hint');
+      if(el){ el.textContent = '이미지 로딩 실패: ' + String(msg); el.classList.add('error'); }
+    } catch(_){}
+  }
+    } catch(_){}
+  }
+  window.addEventListener('error', function(e){
+    console.error('[FATAL]', e.message, e.filename, e.lineno, e.colno);
+    setStatusError(e.message);
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    console.error('[UNHANDLED]', e.reason);
+    setStatusError(e && e.reason && e.reason.message ? e.reason.message : e.reason);
+  });
+  var origFetch = window.fetch;
+  if (origFetch && !origFetch.__wrapped){
+    window.fetch = async function(){
+      var url = arguments[0];
+      console.log('[FETCH][REQ]', url);
+      try{
+        var res = await origFetch.apply(this, arguments);
+        console.log('[FETCH][RES]', res.status, res.url);
+        return res;
+      }catch(err){
+        console.error('[FETCH][ERR]', url, err);
+        setStatusError(err && err.message ? err.message : err);
+        throw err;
+      }
+    };
+    window.fetch.__wrapped = true;
+  }
+  // Log key envs if present without exposing secrets
+  try {
+    if (window.WORKER_BASE) console.log('[ENV] WORKER_BASE:', window.WORKER_BASE);
+  } catch(_){}
+})();
+// === /DEBUG ===
+
 import {
   getImageById,
   gcvOCR,
@@ -300,7 +343,6 @@ function renderFallbackTokens(container, text){
     if(!tok.trim()) return;
     const span=document.createElement("span");
     span.className="tok";
-    span.lang="ja";
     span.textContent=tok;
     span.addEventListener("click",ev=>{
       ev.stopPropagation();
@@ -322,9 +364,9 @@ function renderFuriganaTokens(container, tokens){
     const dataAttr =
       `data-surf="${surf}" data-lemma="${escapeHtml(t.lemma||t.surface)}" data-read="${read}"`;
     if(hasKanji(t.surface) && t.reading){
-      return `<span class="tok" lang="ja" ${dataAttr}><ruby lang="ja">${surf}<rt>${read}</rt></ruby></span>`;
+      return `<span class="tok" ${dataAttr}><ruby>${surf}<rt>${read}</rt></ruby></span>`;
     }
-    return `<span class="tok" lang="ja" ${dataAttr}>${surf}</span>`;
+    return `<span class="tok" ${dataAttr}>${surf}</span>`;
   }).join("");
 
   container.querySelectorAll(".tok").forEach(span=>{
@@ -481,7 +523,7 @@ function applyDir(dir){
   currentDir=dir;
 
   ensureDock();
-  // placeSubNearMain() removed // 서브팝업이 열려 있다면 갱신
+  placeSubNearMain(); // 서브팝업이 열려 있다면 갱신
   updateArrowEnablement();
 }
 
@@ -549,7 +591,7 @@ async function openSubForToken(tok){
 
   // 일단 서브팝업을 바로 보이게 해서 "안 떠" 문제 제거
   sub.hidden = false;
-  // placeSubNearMain() removed // 먼저 자리 잡고 시작
+  placeSubNearMain(); // 먼저 자리 잡고 시작
 
   // 단어 번역 (lemma 기준)
   try{
@@ -627,11 +669,26 @@ async function openSubForToken(tok){
   }
 
   // 최종적으로 내용까지 다 들어간 뒤 위치 다시 조정
-  // placeSubNearMain() removed
+  placeSubNearMain();
 }
 
 // 메인 팝업 우하단 대각선 쪽에 서브팝업을 놓되, 겹치지 않도록
-function placeSubNearMain(){ /* sub-popup removed; integrated into main pop */ }
+function placeSubNearMain(){
+  if(sub.hidden) return;
+
+  const vb=getVB();
+  const pr=pop.getBoundingClientRect();
+  const sr=sub.getBoundingClientRect();
+  const gap=8;
+
+  // 항상 메인팝업 우하단 대각선 기준
+  let left = pr.right + gap;
+  let top  = pr.bottom + gap;
+
+  // 뷰포트에서 너무 밖으로 나가면 살짝 안으로만 밀어준다
+  if(top + sr.height > vb.offsetTop + vb.height - 8){
+    top = vb.offsetTop + vb.height - sr.height - 8;
+  }
   if(left + sr.width > vb.offsetLeft + vb.width - 8){
     left = vb.offsetLeft + vb.width - sr.width - 8;
   }
@@ -665,7 +722,7 @@ function relayout(){
   }
 
   if(!sub.hidden){
-    // placeSubNearMain() removed
+    placeSubNearMain();
   }
 }
 
@@ -673,5 +730,10 @@ window.addEventListener("resize", relayout,{passive:true});
 globalThis.visualViewport?.addEventListener("resize", relayout,{passive:true});
 window.addEventListener("scroll", relayout,{passive:true});
 
-// (sub-popup removed; no background-close behavior needed for sub)
-
+// ===== 바깥 탭 시 서브팝업만 닫기 =====
+stage.addEventListener("click",e=>{
+  if(!sub.hidden && !sub.contains(e.target)){
+    sub.hidden=true;
+  }
+  // 메인 팝업 닫기는 dock의 ✕로만
+},{capture:false});
