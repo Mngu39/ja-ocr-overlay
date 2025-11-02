@@ -26,6 +26,36 @@ const subHead   = document.getElementById("subHead");
 const kwrapDiv  = document.getElementById("kwrap");
 const kExplain  = document.getElementById("kExplain");
 
+
+// === unify: move sub content into main pop ===
+(function unifySubIntoMain(){
+  try {
+    const pop = document.getElementById('pop');
+    const sub = document.getElementById('sub');
+    if(!pop) return;
+    const ids = ['subHead','kwrap','kExplain'];
+    const frag = document.createDocumentFragment();
+    for(const id of ids){
+      const el = document.getElementById(id);
+      if(el && el.parentNode !== pop){
+        frag.appendChild(el);
+      }
+    }
+    if(frag.childNodes.length){
+      // place before transLine separator if exists
+      const sep = pop.querySelector('.sep');
+      if(sep) pop.insertBefore(frag, sep);
+      else pop.appendChild(frag);
+    }
+    if(sub && sub.parentNode){
+      // remove sub container entirely
+      sub.parentNode.removeChild(sub);
+    }
+    // make placeSubNearMain a no-op for safety
+    window.placeSubNearMain = function(){};
+  } catch(e){ console.warn('[unify] failed', e); }
+})();
+// === /unify ===
 // 현재 선택 상태
 let annos = [];            // [{text, polygon:[[x,y]..]}, ...]
 let selected = [];         // [{el,text}]
@@ -79,27 +109,6 @@ async function loadDBs(){
   }
 }
 const DB_READY = loadDBs();
-
-/* === Kanji knowledge helpers === */
-function isKnownKanjiChar(ch){
-  if(!ch || ch.length!==1) return true;
-  if(!/[\u3400-\u9FFF]/.test(ch)) return true;
-  try{
-    const inDeck = !!(typeof ANKI!=='undefined' && ANKI && ANKI[ch]);
-    const hasMeta = !!(typeof KANJI!=='undefined' && KANJI && KANJI[ch]);
-    return inDeck && hasMeta;
-  }catch(_){ return false; }
-}
-function firstUnknownKanjiIn(s){
-  if(!s) return null;
-  for(const ch of s){ if(/[\u3400-\u9FFF]/.test(ch) && !isKnownKanjiChar(ch)) return ch; }
-  return null;
-}
-function openNaverJa(term){
-  const url = `https://ja.dict.naver.com/#/search?query=${encodeURIComponent(term||'')}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
 
 // ===== 유틸 =====
 const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({
@@ -541,38 +550,117 @@ Array.from(pop.querySelectorAll(".arrow-bar")).forEach(bar=>{
 });
 
 // ===== 서브팝업 =====
-async 
-function openSubForToken(tok){
-  const surface = tok?.surface || "";
-  const reading = (tok?.reading || "").replace(/[\u30a1-\u30f6]/g, ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
-  const lemma   = tok?.lemma   || surface;
+async function openSubForToken(tok){
+  currentTokenObj = tok;
 
-  // 헤더(표면형+루비), lemma
+  const surface = tok.surface || "";
+  const reading = kataToHira(tok.reading || "");
+  const lemma   = tok.lemma   || surface;
+
+  // 헤더(표면형+루비는 링크), lemma, 번역 자리
   const navUrl = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(lemma||surface)}`;
+
   subHead.innerHTML = `
     <a class="surf" href="${navUrl}" target="_blank" rel="noopener noreferrer">
-      ${(/[\u3400-\u9FFF]/.test(surface) && reading)
-        ? `<ruby lang="ja">${escapeHtml(surface)}<rt>${escapeHtml(reading)}</rt></ruby>`
-        : escapeHtml(surface)}
+      ${
+        hasKanji(surface) && reading
+        ? `<ruby>${escapeHtml(surface)}<rt>${escapeHtml(reading)}</rt></ruby>`
+        : escapeHtml(surface)
+      }
     </a>
     <span class="lemma">(${escapeHtml(lemma)})</span>
     <span id="subMeaning" class="meaning"></span>
   `;
 
-  // 한자 박스/설명 초기화
   kwrapDiv.innerHTML = "";
-  kExplain.style.display = "none";
-  kExplain.innerHTML = "";
+  kExplain.style.display="none";
+  kExplain.innerHTML="";
 
-  // 메인 팝업 내부 섹션 갱신
-  rubyLine.innerHTML = "";
-  transLine.textContent = "…" ;
-  // 필요시 이후 로직(번역/형태소 채우기)은 기존 코드 흐름을 그대로 사용
+  // 일단 서브팝업을 바로 보이게 해서 "안 떠" 문제 제거
+  /* unified: sub hidden */
+  /* unified: no sub placement */ // 먼저 자리 잡고 시작
+
+  // 단어 번역 (lemma 기준)
+  try{
+    const r = await translateJaKo(lemma||surface);
+    const txt = r?.text || r?.result || r?.translation || "";
+    const mEl = document.getElementById("subMeaning");
+    if(mEl){
+      mEl.textContent = txt || "";
+    }
+  }catch{
+    /* ignore - 번역 실패해도 그냥 빈칸 */
+  }
+
+  // 한자 박스
+  await DB_READY;
+  const uniqKanji = Array.from(new Set(Array.from(surface).filter(ch=>hasKanji(ch))));
+
+  // 박스 공통 최소폭 계산 (가장 긴 gloss 기준)
+  let maxGlossLen=0;
+  const previewList=[];
+  for(const ch of uniqKanji){
+    const anki = ANKI[ch];
+    const db   = KANJI[ch];
+
+    let glossText="";
+    if(anki && anki.mean){
+      glossText = anki.mean;
+    }else if(db){
+      // 일반 DB는 박스 안에 음/훈만 넣어줄 수 있음
+      const yomi=(db["음"]||"").toString().trim();
+      const hun =(db["훈"]||"").toString().trim();
+      glossText=[yomi, hun].filter(Boolean).join(" · ");
+    }else{
+      glossText = "";
+    }
+
+    maxGlossLen=Math.max(maxGlossLen, glossText.replace(/\n/g," ").length);
+    previewList.push({ ch, anki, db, glossText });
+  }
+
+  const minW = Math.min(240, Math.max(72, maxGlossLen*8));
+  kwrapDiv.innerHTML="";
+
+  for(const item of previewList){
+    const {ch, anki, db, glossText} = item;
+
+    const box=document.createElement("div");
+    box.className="kbox"+(anki ? " anki" : "");
+    box.style.minWidth = minW+"px";
+    box.innerHTML = `
+      <div class="kbox-head">${escapeHtml(ch)}</div>
+      <div class="kbox-body">${nl2br(glossText)}</div>
+    `;
+
+    // 클릭 동작:
+    // - 암기장(anki) 있으면: 아래 kExplain 토글 (설명 전개)
+    // - 암기장에 없으면: 네이버 일본어 사전으로 이동
+    box.addEventListener("click",ev=>{
+      ev.stopPropagation();
+      if(anki){
+        if(kExplain.style.display==="none"){
+          kExplain.style.display="block";
+          kExplain.innerHTML = nl2br(anki.explain || "(설명 없음)");
+        }else{
+          kExplain.style.display="none";
+          kExplain.innerHTML="";
+        }
+      }else{
+        // anki에 없으면 그냥 일본어 사전으로
+        openNaverJaLemma(ch);
+      }
+    });
+
+    kwrapDiv.appendChild(box);
+  }
+
+  // 최종적으로 내용까지 다 들어간 뒤 위치 다시 조정
+  /* unified: no sub placement */
 }
 
-
 // 메인 팝업 우하단 대각선 쪽에 서브팝업을 놓되, 겹치지 않도록
-function placeSubNearMain(){
+function /* unified: no sub placement */{
   if(sub.hidden) return;
 
   const vb=getVB();
