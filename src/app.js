@@ -16,6 +16,27 @@ const hint      = document.getElementById("hint");
 const pop       = document.getElementById("pop");
 const rubyLine  = document.getElementById("rubyLine");
 const transLine = document.getElementById("transLine");
+// === Unify: move sub-popover content into main popover (no index.html changes) ===
+(function unifySubIntoMain(){
+  try{
+    if (sub && pop){
+      // Move important children from #sub to #pop so existing const refs still work
+      const nodes = [subHead, kwrapDiv, kExplain, rubyLine, transLine].filter(Boolean);
+      const frag = document.createDocumentFragment();
+      for(const el of nodes){
+        if (el && el.parentNode && el.parentNode !== pop){
+          frag.appendChild(el);
+        }
+      }
+      if(frag.childNodes.length){ pop.appendChild(frag); }
+      // Always keep sub hidden
+      sub.hidden = true;
+      // Optional: if any code tries to show sub again, force-hide on next tick
+      setTimeout(()=>{ try{ sub.hidden = true; }catch(_){ } }, 0);
+    }
+  }catch(_){}
+})();
+
 
 const editDlg   = document.getElementById("editDlg");
 const editInput = document.getElementById("editInput");
@@ -79,30 +100,6 @@ async function loadDBs(){
   }
 }
 const DB_READY = loadDBs();
-
-
-/* === Kanji knowledge helpers (minimal, non-invasive) === */
-function isKnownKanjiChar(ch){
-  if(!ch || ch.length!==1) return true;
-  if(!/[\u3400-\u9FFF]/.test(ch)) return true;
-  try{
-    const inDeck = !!(typeof ANKI!=='undefined' && ANKI && ANKI[ch]);
-    const hasMeta = !!(typeof KANJI!=='undefined' && KANJI && KANJI[ch]);
-    return inDeck && hasMeta;
-  }catch(_){ return false; }
-}
-function firstUnknownKanjiIn(s){
-  if(!s) return null;
-  for(const ch of s){
-    if(/[\u3400-\u9FFF]/.test(ch) && !isKnownKanjiChar(ch)) return ch;
-  }
-  return null;
-}
-function openNaverJa(term){
-  const url = `https://ja.dict.naver.com/#/search?query=${encodeURIComponent(term||"")}`;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
 
 // ===== 유틸 =====
 const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({
@@ -545,7 +542,6 @@ Array.from(pop.querySelectorAll(".arrow-bar")).forEach(bar=>{
 
 // ===== 서브팝업 =====
 async function openSubForToken(tok){
-  try{ const u = firstUnknownKanjiIn(tok && tok.surface); if(u){ openNaverJa(u); return; } }catch(_){ }
   currentTokenObj = tok;
 
   const surface = tok.surface || "";
@@ -572,7 +568,7 @@ async function openSubForToken(tok){
   kExplain.innerHTML="";
 
   // 일단 서브팝업을 바로 보이게 해서 "안 떠" 문제 제거
-  sub.hidden = false;
+  sub.hidden=true;
   placeSubNearMain(); // 먼저 자리 잡고 시작
 
   // 단어 번역 (lemma 기준)

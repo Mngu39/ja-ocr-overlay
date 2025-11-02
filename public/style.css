@@ -360,9 +360,6 @@ img, .box, .popover, .subpop{
   user-select:none;
 }
 
-/* === JP glyph + single-popover helpers === */
-:lang(ja), .ja, .tok[lang="ja"]{
-  font-family: "Hiragino Sans","Yu Gothic","Noto Sans JP","Hiragino Kaku Gothic ProN",
-               "Source Han Sans JP","Meiryo","MS PGothic", system-ui, -apple-system,
-               BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
+/* === unify sub into main popover === */
+#sub{ display:none !important; visibility:hidden !important; }
+.popover .sub-head-row,.popover .kwrap,.popover .k-explain,.popover .ruby-line,.popover .trans-line{ margin-top:8px; }
