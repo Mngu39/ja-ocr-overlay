@@ -359,3 +359,10 @@ img, .box, .popover, .subpop{
   -webkit-user-select:none;
   user-select:none;
 }
+
+/* === JP glyph + single-popover helpers === */
+:lang(ja), .ja, .tok[lang="ja"]{
+  font-family: "Hiragino Sans","Yu Gothic","Noto Sans JP","Hiragino Kaku Gothic ProN",
+               "Source Han Sans JP","Meiryo","MS PGothic", system-ui, -apple-system,
+               BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}

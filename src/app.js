@@ -80,6 +80,30 @@ async function loadDBs(){
 }
 const DB_READY = loadDBs();
 
+
+/* === Kanji knowledge helpers (minimal, non-invasive) === */
+function isKnownKanjiChar(ch){
+  if(!ch || ch.length!==1) return true;
+  if(!/[\u3400-\u9FFF]/.test(ch)) return true;
+  try{
+    const inDeck = !!(typeof ANKI!=='undefined' && ANKI && ANKI[ch]);
+    const hasMeta = !!(typeof KANJI!=='undefined' && KANJI && KANJI[ch]);
+    return inDeck && hasMeta;
+  }catch(_){ return false; }
+}
+function firstUnknownKanjiIn(s){
+  if(!s) return null;
+  for(const ch of s){
+    if(/[\u3400-\u9FFF]/.test(ch) && !isKnownKanjiChar(ch)) return ch;
+  }
+  return null;
+}
+function openNaverJa(term){
+  const url = `https://ja.dict.naver.com/#/search?query=${encodeURIComponent(term||"")}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+
 // ===== 유틸 =====
 const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({
   '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
@@ -521,6 +545,7 @@ Array.from(pop.querySelectorAll(".arrow-bar")).forEach(bar=>{
 
 // ===== 서브팝업 =====
 async function openSubForToken(tok){
+  try{ const u = firstUnknownKanjiIn(tok && tok.surface); if(u){ openNaverJa(u); return; } }catch(_){ }
   currentTokenObj = tok;
 
   const surface = tok.surface || "";
