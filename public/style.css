@@ -366,3 +366,11 @@ img, .box, .popover, .subpop{
 
 
 #hint.error{ color:#b00020; font-weight:600; }
+
+/* Japanese glyph priority */
+:lang(ja), .ja, .tok[lang="ja"]{
+  font-family: "Hiragino Sans","Yu Gothic","Noto Sans JP","Hiragino Kaku Gothic ProN",
+               "Source Han Sans JP","Meiryo","MS PGothic", system-ui, -apple-system,
+               BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-feature-settings: "pkna" 1;
+}

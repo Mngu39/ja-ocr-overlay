@@ -1,37 +1,3 @@
-// === DEBUG INSTRUMENTATION (non-invasive) ===
-(function(){
-  function setStatusError(msg){
-    try{
-      var el = document.querySelector('#image-status') || document.querySelector('#hint');
-      if(el){ el.textContent = '이미지 로딩 실패: ' + String(msg); el.classList.add('error'); }
-    }catch(_){}
-  }
-  window.addEventListener('error', function(e){
-    console.error('[FATAL]', e.message, e.filename, e.lineno, e.colno);
-    setStatusError(e.message);
-  });
-  window.addEventListener('unhandledrejection', function(e){
-    console.error('[UNHANDLED]', e.reason);
-    setStatusError(e && e.reason && e.reason.message ? e.reason.message : e.reason);
-  });
-  var origFetch = window.fetch;
-  if (origFetch && !origFetch.__wrapped){
-    window.fetch = async function(){
-      var url = arguments[0];
-      console.log('[FETCH][REQ]', url);
-      try{
-        var res = await origFetch.apply(this, arguments);
-        console.log('[FETCH][RES]', res.status, res.url);
-        return res;
-      }catch(err){
-        console.error('[FETCH][ERR]', url, err);
-        setStatusError(err && err.message ? err.message : err);
-        throw err;
-      }
-    };
-    window.fetch.__wrapped = true;
-  }
-})();
 ;
 // === /DEBUG ===
 
@@ -116,6 +82,28 @@ async function loadDBs(){
   }
 }
 const DB_READY = loadDBs();
+
+// === Kanji helpers ===
+function isKnownKanjiChar(ch){
+  if(!hasKanji(ch) || (ch||"").length!==1) return true;
+  try{
+    return !!(ANKI && ANKI[ch]) && !!(KANJI && KANJI[ch]);
+  }catch(_){
+    return false;
+  }
+}
+function firstUnknownKanjiIn(s){
+  if(!s) return null;
+  for(const ch of s){
+    if(hasKanji(ch) && !isKnownKanjiChar(ch)) return ch;
+  }
+  return null;
+}
+function openNaverJa(term){
+  const url = `https://ja.dict.naver.com/#/search?query=${encodeURIComponent(term||"")}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 
 // ===== 유틸 =====
 const escapeHtml = s => (s||"").replace(/[&<>"']/g, m=>({
@@ -558,6 +546,7 @@ Array.from(pop.querySelectorAll(".arrow-bar")).forEach(bar=>{
 
 // ===== 서브팝업 =====
 async function openSubForToken(tok){
+  try{ const u = firstUnknownKanjiIn(tok && tok.surface); if(u){ openNaverJa(u); return; } }catch(_){ }
   currentTokenObj = tok;
 
   const surface = tok.surface || "";
