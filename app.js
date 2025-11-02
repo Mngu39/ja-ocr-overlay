@@ -1,13 +1,10 @@
-
 // === DEBUG INSTRUMENTATION (non-invasive) ===
 (function(){
   function setStatusError(msg){
-    try {
+    try{
       var el = document.querySelector('#image-status') || document.querySelector('#hint');
       if(el){ el.textContent = '이미지 로딩 실패: ' + String(msg); el.classList.add('error'); }
-    } catch(_){}
-  }
-    } catch(_){}
+    }catch(_){}
   }
   window.addEventListener('error', function(e){
     console.error('[FATAL]', e.message, e.filename, e.lineno, e.colno);
@@ -34,11 +31,8 @@
     };
     window.fetch.__wrapped = true;
   }
-  // Log key envs if present without exposing secrets
-  try {
-    if (window.WORKER_BASE) console.log('[ENV] WORKER_BASE:', window.WORKER_BASE);
-  } catch(_){}
 })();
+;
 // === /DEBUG ===
 
 import {
