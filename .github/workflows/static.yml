@@ -1,0 +1,48 @@
+name: Deploy static site (public + src)
+
+on:
+  push:
+    branches: [ main ]   # 브랜치명이 다르면 바꿔주세요
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # public 안에서 ./src/app.js가 로드되도록 src를 복사
+      - name: Prepare artifact
+        run: |
+          rm -rf public/src
+          mkdir -p public
+          cp -a src public/src
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
