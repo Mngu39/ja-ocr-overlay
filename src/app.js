@@ -6,7 +6,7 @@ import {
   openNaverJaLemma,
   openNaverHanja
 } from "./api.js";
-import { placeMainPopover, placeSubDetached } from "./place.js";
+import { placeMainPopover } from "./place.js";
 
 const stage     = document.getElementById("stage");
 const imgEl     = document.getElementById("img");
@@ -27,6 +27,77 @@ const kwrapDiv  = document.getElementById("kwrap");
 const kExplain  = document.getElementById("kExplain");
 
 
+function closeAll(){
+  pop.hidden=true;
+  sub.hidden=true;
+  const dock = pop.querySelector(".dock");
+  if(dock){ pop.classList.remove("select-mode"); }
+  selected.forEach(it=>{
+    it.el.classList.remove("selected");
+    it.el.querySelector(".ord")?.remove();
+  });
+  selected=[];
+}
+
+function openEdit(){
+  // use first selected box text if exists
+  if(!selected.length) return;
+  editInput.value = selected.map(it=>it.text).join("\n");
+  editDlg.showModal();
+}
+// === PATCH state ===
+let popDir = null;
+let selectMode = false;
+let activeAnchorEl = null;
+let viewMode = "sentence"; // "sentence" | "token"
+
+// wrap pop content into .pop-body for select-mode opacity/pointer-events
+(function ensurePopBody(){
+  const existing = pop.querySelector(".pop-body");
+  if(existing) return;
+  const body = document.createElement("div");
+  body.className="pop-body";
+  // move children except dock (dock will be added later)
+  const kids=[...pop.childNodes];
+  for(const n of kids){
+    if(n.nodeType===1 && n.classList && n.classList.contains("dock")) continue;
+    body.appendChild(n);
+  }
+  pop.appendChild(body);
+})();
+
+// token pane container inside main pop
+const tokenPane = document.createElement("div");
+tokenPane.className="token-pane";
+tokenPane.hidden = true;
+tokenPane.appendChild(subHead);
+tokenPane.appendChild(kwrapDiv);
+tokenPane.appendChild(kExplain);
+pop.querySelector(".pop-body").appendChild(tokenPane);
+// sub popup no longer used visually
+sub.hidden = true;
+
+// reposition scheduling
+let _rp=false;
+function scheduleReposition(){
+  if(_rp) return;
+  _rp=true;
+  requestAnimationFrame(()=>{
+    _rp=false;
+    if(pop.hidden || !activeAnchorEl) return;
+    popDir = placeMainPopover(activeAnchorEl, pop, popDir);
+  });
+}
+window.addEventListener("scroll", scheduleReposition, {passive:true});
+window.addEventListener("resize", scheduleReposition, {passive:true});
+
+// observe pop size changes (e.g., translation arrives)
+if(window.ResizeObserver){
+  new ResizeObserver(()=>scheduleReposition()).observe(pop);
+}
+
+
+// === /unify ===
 // 현재 선택 상태
 let annos = [];            // [{text, polygon:[[x,y]..]}, ...]
 let selected = [];         // [{el,text}]
@@ -43,8 +114,8 @@ let ANKI  = {};
 async function loadDBs(){
   try{
     const [j1, j2] = await Promise.allSettled([
-      fetch("./kanji_ko_attr_irreg.min.json").then(r=>r.ok?r.json():null),
-      fetch("./일본어_한자_암기박사/deck.json").then(r=>r.ok?r.json():null)
+      fetch("https://mngu39.github.io/Test-deepl-furigana/kanji_ko_attr_irreg.min.json").then(r=>r.ok?r.json():null),
+      fetch("https://mngu39.github.io/Test-deepl-furigana/deck.json").then(r=>r.ok?r.json():null)
     ]);
 
     if(j1.status==="fulfilled" && j1.value){
@@ -52,64 +123,27 @@ async function loadDBs(){
     }
 
     if(j2.status==="fulfilled" && j2.value){
-      const deck = j2.value;
-
-      // note_model_uuid -> field name list
-      const modelMap=new Map();
-      const nms = deck.note_models || deck["note_models"] || [];
-      for(const nm of nms){
-        const uuid = nm.note_model_uuid || nm["note_model_uuid"] || nm["crowdanki_uuid"] || nm["id"] || nm["uuid"];
-        const flds = (nm.flds || nm["flds"] || []).map(f=>f && (f.name || f["name"] || "")).filter(Boolean);
-        if(uuid && flds.length) modelMap.set(uuid, flds);
-      }
-
-      // notes collect
-      const notes=[];
-      (function walk(x){
-        if(!x) return;
-        if(Array.isArray(x)){ x.forEach(walk); return; }
-        if(typeof x==="object"){
-          if(Array.isArray(x.notes)) notes.push(...x.notes);
-          if(Array.isArray(x.children)) x.children.forEach(walk);
-          // 기타 키는 무시
-        }
-      })(deck);
-
       const map={};
-
-      const strip = s => (s??"").toString().replace(/<[^>]+>/g,"").trim();
-
-      for(const n of notes){
-        const f = n.fields || n.flds || [];
-        const uuid = n.note_model_uuid || n["note_model_uuid"];
-        const names = modelMap.get(uuid) || [];
-
-        // 1) 新常用漢字 덱 (Unit/Expression/Meaning/Kanji Theme)
-        const iExpr = names.findIndex(x=>/^expression$/i.test(x));
-        const iMean = names.findIndex(x=>/^meaning$/i.test(x));
-        const iUnit = names.findIndex(x=>/^unit$/i.test(x));
-        const iTheme= names.findIndex(x=>/^kanji\s*theme$/i.test(x));
-
-        if(iExpr>=0 && iMean>=0){
-          const ch = strip(f[iExpr]);
-          const mean = strip(f[iMean]);
-          const unit = strip(iUnit>=0?f[iUnit]:"");
-          const theme= strip(iTheme>=0?f[iTheme]:"");
-          if(ch && ch.length===1 && !map[ch]){
-            map[ch] = { mean, explain: (theme||unit) ? `${theme}${theme&&unit?" ":""}${unit?("#"+unit):""}`.trim() : "" };
-          }
-          continue;
+      const stack=[ j2.value ];
+      while(stack.length){
+        const node=stack.pop();
+        if(Array.isArray(node?.children)){
+          stack.push(...node.children);
         }
-
-        // 2) 旧 덱(Front/Back/Explain) - 기존 방식 유지
-        const ch = strip(f[1]);
-        const mean = strip(f[2]);
-        const explain = strip(f[3]);
-        if(ch && ch.length===1 && !map[ch]){
-          map[ch] = { mean, explain };
+        if(Array.isArray(node?.notes)){
+          for(const n of node.notes){
+            const f=n.fields||[];
+            const ch      =(f[1]??"").toString().trim();
+            const mean    =(f[2]??"").toString().replace(/<[^>]+>/g,"").trim();
+            const explain =(f[3]??"").toString().replace(/<[^>]+>/g,"").trim();
+            if(ch && ch.length===1){
+              if(!map[ch]){
+                map[ch]={ mean, explain };
+              }
+            }
+          }
         }
       }
-
       ANKI = map;
     }
   }catch(e){
@@ -128,62 +162,6 @@ const kataToHira = s =>
     ch=>String.fromCharCode(ch.charCodeAt(0)-0x60));
 function nl2br(s){
   return escapeHtml(s).replace(/\n/g,"<br>");
-}
-
-
-// OCR 박스 병합: 문단이 바뀌지 않는 줄바꿈(엔터 1회 수준)은 같은 박스로 묶기
-function mergeSoftLineBreakAnnots(list){
-  const annos = Array.isArray(list) ? list.slice() : [];
-  if(annos.length<=1) return annos;
-
-  const endsSentence = (s)=>/([。！？!?])\s*$/.test(String(s||""));
-  const rectOf = (a)=>{
-    const p=a.polygon||[];
-    const xs=p.map(v=>v[0]||0), ys=p.map(v=>v[1]||0);
-    const l=Math.min(...xs), r=Math.max(...xs), t=Math.min(...ys), b=Math.max(...ys);
-    return {l,t,r,b,w:Math.max(1,r-l),h:Math.max(1,b-t)};
-  };
-  const overlapRatioX=(ra, rb)=>{
-    const inter = Math.max(0, Math.min(ra.r, rb.r) - Math.max(ra.l, rb.l));
-    return inter / Math.max(1, Math.min(ra.w, rb.w));
-  };
-
-  // 위->아래, 좌->우 정렬
-  annos.sort((a,b)=>{
-    const ra=rectOf(a), rb=rectOf(b);
-    if(Math.abs(ra.t-rb.t)>3) return ra.t-rb.t;
-    return ra.l-rb.l;
-  });
-
-  const out=[];
-  let cur=annos[0];
-  let rCur=rectOf(cur);
-
-  for(let i=1;i<annos.length;i++){
-    const nxt=annos[i];
-    const rN=rectOf(nxt);
-
-    const gapY = rN.t - rCur.b;
-    const sameColumn = overlapRatioX(rCur, rN) >= 0.60;
-    const leftClose = Math.abs(rN.l - rCur.l) <= Math.max(8, Math.min(rCur.w, rN.w)*0.25);
-    const gapOk = gapY >= -2 && gapY <= Math.max(10, Math.min(rCur.h, rN.h)*0.75);
-
-    const shouldMerge = sameColumn && leftClose && gapOk && !endsSentence(cur.text);
-
-    if(shouldMerge){
-      // merge: 텍스트는 줄바꿈으로, polygon은 union bbox
-      cur.text = String(cur.text||"").trimEnd() + "\n" + String(nxt.text||"").trimStart();
-      const l=Math.min(rCur.l, rN.l), t=Math.min(rCur.t, rN.t), r=Math.max(rCur.r, rN.r), b=Math.max(rCur.b, rN.b);
-      cur.polygon = [[l,t],[r,t],[r,b],[l,b]];
-      rCur = {l,t,r,b,w:Math.max(1,r-l),h:Math.max(1,b-t)};
-    }else{
-      out.push(cur);
-      cur=nxt;
-      rCur=rN;
-    }
-  }
-  out.push(cur);
-  return out;
 }
 
 // ===== 사용량 카운트 =====
@@ -328,52 +306,75 @@ function openMainFromSelection(){
 }
 
 // dock: 팝업 옆에 ✕ / ✎
+
 function ensureDock(){
   let dock = pop.querySelector(".dock");
-  if(!dock){
-    dock = document.createElement("div");
-    dock.className="dock dock-right";
+  if(dock) return dock;
 
-    // 닫기
-    const btnClose=document.createElement("div");
-    btnClose.className="dock-btn";
-    btnClose.textContent="✕";
-    btnClose.title="닫기";
-    btnClose.addEventListener("click",e=>{
-      e.stopPropagation();
-      pop.hidden=true;
-      sub.hidden=true;
-      selected.forEach(it=>{
-        it.el.classList.remove("selected");
-        it.el.querySelector(".ord")?.remove();
-      });
-      selected=[];
-    });
+  dock = document.createElement("div");
+  dock.className="dock";
 
-    // 수정
-    const btnEdit=document.createElement("div");
-    btnEdit.className="dock-btn";
-    btnEdit.textContent="✎";
-    btnEdit.title="수정";
-    btnEdit.addEventListener("click",e=>{
-      e.stopPropagation();
-      editInput.value = selectedText() || "";
-      editDlg.showModal();
-    });
+  // 뒤로(형태소 화면 -> 문장 화면)
+  const btnBack=document.createElement("div");
+  btnBack.className="dock-btn";
+  btnBack.textContent="←";
+  btnBack.title="뒤로";
+  btnBack.addEventListener("click",e=>{
+    e.stopPropagation();
+    if(viewMode==="token"){
+      viewMode="sentence";
+      tokenPane.hidden = true;
+      rubyLine.style.display="";
+      transLine.style.display="";
+      btnBack.style.display="none";
+      scheduleReposition();
+    }
+  });
+  btnBack.style.display="none";
+  dock.appendChild(btnBack);
 
-    dock.appendChild(btnClose);
-    dock.appendChild(btnEdit);
-    pop.appendChild(dock);
-  }
+  // 투명화(선택 모드)
+  const btnGhost=document.createElement("div");
+  btnGhost.className="dock-btn";
+  btnGhost.textContent="◳";
+  btnGhost.title="선택 모드";
+  btnGhost.addEventListener("click",e=>{
+    e.stopPropagation();
+    selectMode = !selectMode;
+    pop.classList.toggle("select-mode", selectMode);
+    // nothing else: if user taps boxes, we will auto exit
+  });
+  dock.appendChild(btnGhost);
 
-  // dock이 화면을 벗어나면 반대편으로
-  const vb=getVB();
-  const pr=pop.getBoundingClientRect();
-  const dockW=44;
-  const canRight = (pr.right + dockW) <= (vb.offsetLeft+vb.width-8);
+  // 수정 (✎)
+  const btnEdit=document.createElement("div");
+  btnEdit.className="dock-btn";
+  btnEdit.textContent="✎";
+  btnEdit.title="수정";
+  btnEdit.addEventListener("click",e=>{
+    e.stopPropagation();
+    openEdit();
+  });
+  dock.appendChild(btnEdit);
 
-  dock.classList.toggle("dock-right", !!canRight);
-  dock.classList.toggle("dock-left",  !canRight);
+  // 닫기 (✕) - 최우측
+  const btnClose=document.createElement("div");
+  btnClose.className="dock-btn";
+  btnClose.textContent="✕";
+  btnClose.title="닫기";
+  btnClose.addEventListener("click",e=>{
+    e.stopPropagation();
+    closeAll();
+  });
+  dock.appendChild(btnClose);
+
+  pop.appendChild(dock);
+
+  // expose for other functions
+  pop.__btnBack = btnBack;
+  pop.__btnGhost = btnGhost;
+
+  return dock;
 }
 
 // 수정 다이얼로그 저장
@@ -446,8 +447,8 @@ async function openMainPopover(anchor, text){
     Math.round(overlayW*0.92)
   )+"px";
 
-  // 일단 기본 위치로 한 번 놓고(방향을 고정해서 스크롤 튐 방지)
-  currentDir = placeMainPopover(anchor, pop, 8);
+  // 일단 기본 위치로 한 번 놓고
+  placeMainPopover(anchor, pop, 8);
 
   // 1차 표시: fallback 토큰 / 번역 placeholder
   renderFallbackTokens(rubyLine, text);
@@ -505,6 +506,52 @@ function getVB(){
     offsetLeft:scrollX
   });
 }
+
+
+function mergeSoftLineBreakAnnots(annos){
+  if(!Array.isArray(annos)) return annos;
+  // sort top-to-bottom then left
+  const items = annos.map(a=>({...a}));
+  items.sort((a,b)=>{
+    const ay=a.polygon?.[0]?.[1]??0, by=b.polygon?.[0]?.[1]??0;
+    if(ay!==by) return ay-by;
+    const ax=a.polygon?.[0]?.[0]??0, bx=b.polygon?.[0]?.[0]??0;
+    return ax-bx;
+  });
+  const out=[];
+  const endPunct = /[。！？!?]$/;
+  function bbox(poly){
+    const xs=poly.map(p=>p[0]), ys=poly.map(p=>p[1]);
+    return {x1:Math.min(...xs), y1:Math.min(...ys), x2:Math.max(...xs), y2:Math.max(...ys)};
+  }
+  function union(b1,b2){
+    return {x1:Math.min(b1.x1,b2.x1), y1:Math.min(b1.y1,b2.y1), x2:Math.max(b1.x2,b2.x2), y2:Math.max(b1.y2,b2.y2)};
+  }
+  function polyFromBox(b){
+    return [[b.x1,b.y1],[b.x2,b.y1],[b.x2,b.y2],[b.x1,b.y2]];
+  }
+  for(const cur of items){
+    const last=out[out.length-1];
+    if(!last){ out.push(cur); continue; }
+    const b1=bbox(last.polygon||[[0,0],[0,0],[0,0],[0,0]]);
+    const b2=bbox(cur.polygon||[[0,0],[0,0],[0,0],[0,0]]);
+    const vgap = b2.y1 - b1.y2;
+    const leftDiff = Math.abs(b2.x1 - b1.x1);
+    const overlap = Math.max(0, Math.min(b1.x2,b2.x2)-Math.max(b1.x1,b2.x1));
+    const minW = Math.min((b1.x2-b1.x1),(b2.x2-b2.x1));
+    const overlapRatio = minW? overlap/minW : 0;
+    const isSoft = vgap>=0 && vgap < 18 && leftDiff < 25 && overlapRatio > 0.45 && !endPunct.test(String(last.text||"").trim());
+    if(isSoft){
+      last.text = String(last.text||"").trim() + "\n" + String(cur.text||"").trim();
+      const u=union(b1,b2);
+      last.polygon = polyFromBox(u);
+    }else{
+      out.push(cur);
+    }
+  }
+  return out;
+}
+
 
 // anchor 기준으로 pop을 특정 방향(dir)에 "딱 붙여서" 둘 좌표 계산
 function calcPosForDir(dir){
@@ -574,7 +621,7 @@ function applyDir(dir){
   currentDir=dir;
 
   ensureDock();
-  if(!sub.hidden) placeSubNearMain();
+  /* unified: no sub placement */ // 서브팝업이 열려 있다면 갱신
   updateArrowEnablement();
 }
 
@@ -640,9 +687,9 @@ async function openSubForToken(tok){
   kExplain.style.display="none";
   kExplain.innerHTML="";
 
-  // 서브팝업 표시 및 1차 배치(메인 팝업 바깥 아래)
-  sub.hidden = false;
-  placeSubNearMain();
+  // 일단 서브팝업을 바로 보이게 해서 "안 떠" 문제 제거
+  /* unified: sub hidden */
+  /* unified: no sub placement */ // 먼저 자리 잡고 시작
 
   // 단어 번역 (lemma 기준)
   try{
@@ -674,7 +721,7 @@ async function openSubForToken(tok){
       // 일반 DB는 박스 안에 음/훈만 넣어줄 수 있음
       const yomi=(db["음"]||"").toString().trim();
       const hun =(db["훈"]||"").toString().trim();
-      glossText=[hun, yomi].filter(Boolean).join(" · ");
+      glossText=[yomi, hun].filter(Boolean).join(" · ");
     }else{
       glossText = "";
     }
@@ -690,7 +737,7 @@ async function openSubForToken(tok){
     const {ch, anki, db, glossText} = item;
 
     const box=document.createElement("div");
-    box.className = "kbox " + (anki ? "anki" : "learn");
+    box.className="kbox"+(anki ? " anki" : "");
     box.style.minWidth = minW+"px";
     box.innerHTML = `
       <div class="kbox-head">${escapeHtml(ch)}</div>
@@ -720,17 +767,10 @@ async function openSubForToken(tok){
   }
 
   // 최종적으로 내용까지 다 들어간 뒤 위치 다시 조정
-  placeSubNearMain();
+  /* unified: no sub placement */
 }
 
-// 메인 팝업 바깥 아래에 서브팝업을 붙이되, 화면 밖으로 나가지 않게 클램프
-function placeSubNearMain(){
-if(sub.hidden) return;
-// sub는 항상 메인 팝업 바깥 아래에 붙이고(기본),
-// 공간 부족하면 위로 뒤집는다. 좌우는 뷰포트 안으로 클램프.
-placeSubDetached(pop, sub, 8);
-
-}
+// (sub placement removed; token view is in main pop)
 
 // ===== 레이아웃 재계산 =====
 function relayout(){
@@ -742,14 +782,14 @@ function relayout(){
       applyDir(currentDir);
     }else{
       // 아직 방향 고정 전이면 기본 알고리즘
-      currentDir = placeMainPopover(currentAnchor, pop, 8);
+      placeMainPopover(currentAnchor, pop, 8);
       ensureDock();
       updateArrowEnablement();
     }
   }
 
   if(!sub.hidden){
-    placeSubNearMain();
+    /* unified: no sub placement */
   }
 }
 

@@ -87,34 +87,34 @@ html,body{
   border:1px solid var(--border);
   border-radius:14px;
   /* 화살표 바가 팝업 안쪽에 붙을 공간 확보 (위/아래/좌/우 28px 패딩) */
-  padding:16px;
-  padding-top:64px;
+  padding:28px;
   box-shadow:0 12px 40px rgba(0,0,0,.5);
   z-index:50;
 }
 
-/* 팝업 이동 화살표
-   - iPhone/iPad에서 잘리지 않도록: 팝업 내부 좌상단 2x2 버튼으로 통일
+/* 팝업 이동 화살표 바
+   - 팝업 내부 가장자리에 딱 붙음
+   - 길쭉한 막대 느낌 유지
 */
 .arrow-bar{
   position:absolute;
-  width:28px;
-  height:28px;
   background:#2b2f3a;
-  border-radius:8px;
+  border-radius:6px;
   cursor:pointer;
   color:#fff;
-  font-size:14px;
-  font-weight:700;
-  line-height:28px;
+  font-size:10px;
+  font-weight:600;
+  line-height:1;
   display:flex;
   align-items:center;
   justify-content:center;
   user-select:none;
   -webkit-user-select:none;
-  opacity:.9;
+  opacity:.8;
 }
-.arrow-bar:active{ filter:brightness(1.15); }
+.arrow-bar:active{
+  filter:brightness(1.2);
+}
 .arrow-bar.disabled{
   opacity:.25;
   cursor:not-allowed;
@@ -123,11 +123,32 @@ html,body{
   );
 }
 
-/* 2x2 cluster (top-left) */
-.arrow-top   { top:12px; left:12px; }
-.arrow-bottom{ top:12px; left:44px; }
-.arrow-left  { top:44px; left:12px; }
-.arrow-right { top:44px; left:44px; }
+/* 위/아래 막대: 가로로 길고 얇게 */
+.arrow-top,
+.arrow-bottom{
+  height:16px;
+  left:12%;
+  right:12%;
+  min-width:60px;
+}
+.arrow-top{   top:4px; }
+.arrow-bottom{bottom:4px; }
+
+/* 좌/우 막대: 세로로 길고 얇게 */
+.arrow-left,
+.arrow-right{
+  width:16px;
+  top:20%;
+  bottom:20%;
+  min-height:60px;
+  writing-mode:vertical-rl;
+  text-orientation:upright;
+  font-size:12px;
+  line-height:1;
+}
+.arrow-left{  left:4px; }
+.arrow-right{ right:4px; }
+
 /* 루비 줄 */
 .ruby-line{
   line-height:1.85;
@@ -167,33 +188,36 @@ html,body{
   word-break:break-word;
 }
 
-/* dock: ✕ / ✎ (팝업 안쪽 상단에) */
+/* dock: ✕ / ✎ (팝업 옆에 세로로) */
 .dock{
   position:absolute;
-  top:12px;
+  top:8px;
+  width:36px;
   display:flex;
-  flex-direction:row;
-  gap:8px;
+  flex-direction:column;
+  gap:10px;
   z-index:80;
 }
-.dock-left{ left:84px; right:auto; }   /* 화살표 cluster 오른쪽 */
-.dock-right{ right:12px; left:auto; }
+.dock-left{ left:-44px; }
+.dock-right{ right:-44px; }
 
 .dock-btn{
-  width:34px;
-  height:34px;
-  border-radius:17px;
+  width:36px;
+  height:36px;
+  border-radius:18px;
   background:var(--dock-bg);
   color:var(--dock-fg);
   border:1px solid #3a3f4a;
   font-size:14px;
-  font-weight:700;
-  line-height:34px;
+  font-weight:600;
+  line-height:36px;
   text-align:center;
   cursor:pointer;
   user-select:none;
 }
-.dock-btn:active{ filter:brightness(1.15); }
+.dock-btn:active{
+  filter:brightness(1.2);
+}
 
 /* ====== 서브 팝업 ====== */
 .subpop{
@@ -216,15 +240,15 @@ html,body{
 */
 .sub-head-row{
   display:flex;
-  flex-wrap:nowrap;
+  flex-wrap:wrap;
   align-items:baseline;
   column-gap:8px;
-  overflow:hidden;
-  white-space:nowrap;
+  row-gap:4px;
   margin-bottom:8px;
   font-size:15px;
   line-height:1.5;
   color:#fff;
+  word-break:break-word;
 }
 .sub-head-row a.surf{
   color:#fff;
@@ -232,10 +256,6 @@ html,body{
   font-weight:700;
   font-size:16px;
   line-height:1.5;
-  flex:0 0 auto;
-  max-width:40%;
-  overflow:hidden;
-  text-overflow:ellipsis;
 }
 .sub-head-row a.surf ruby rt{
   font-size:11px;
@@ -245,53 +265,37 @@ html,body{
 .sub-head-row .lemma{
   opacity:.7;
   font-size:14px;
-  flex:0 0 auto;
-  max-width:30%;
-  overflow:hidden;
-  text-overflow:ellipsis;
 }
 .sub-head-row .meaning{
   color:#e7f6ff;
   font-size:15px;
   font-weight:500;
-  flex:1 1 auto;
-  overflow:hidden;
-  text-overflow:ellipsis;
 }
 
 /* 한자들 래핑 */
-/* 한자들 래핑 */
 .kwrap{
   display:flex;
-  flex-direction:column;
-  gap:10px;
+  flex-wrap:wrap;
+  gap:8px;
   margin-bottom:8px;
 }
 
 /* 개별 한자 박스 */
-/* 개별 한자 박스 */
 .kbox{
-  background:#1a1f29;
+  background:#222a39;
   color:#e8eefc;
   border:1px solid #2a2f3b;
   border-radius:10px;
-  padding:8px 10px;
+  padding:6px 8px;
   font-weight:700;
   cursor:pointer;
   line-height:1.4;
+  word-break:break-word;
   min-width:72px;
 }
-
-/* 최신 톤 */
 .kbox.anki{
-  background:#151a22;   /* 어두운 회색 */
-  border-color:#2a3240;
-  color:#e6edf3;
-}
-.kbox.learn{
-  background:#102744;   /* 어두운 파랑 */
-  border-color:#2a5d9a;
-  color:#e6edf3;
+  background:#2d3b29;
+  color:#e8f6e8;
 }
 .kbox-head{
   font-size:16px;
@@ -302,9 +306,8 @@ html,body{
   font-size:13px;
   font-weight:600;
   opacity:.9;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  white-space:normal;
+  word-break:break-word;
 }
 
 /* 암기박사 상세 설명 */
@@ -357,3 +360,21 @@ img, .box, .popover, .subpop{
   user-select:none;
 }
 
+/* unify: ensure sub popover never shows */
+#sub{ display:none !important; visibility:hidden !important; }
+
+
+/* === PATCH: dock compact + select-mode === */
+.dock{position:absolute;top:8px;right:8px;display:flex;gap:6px;z-index:3;flex-direction:row;}
+.dock-btn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:16px;line-height:1;}
+/* keep toggle/select/back buttons clickable even in select-mode */
+#pop.select-mode .pop-body{opacity:0.12;pointer-events:none;}
+#pop.select-mode .dock{opacity:1;pointer-events:auto;}
+/* token pane scroll inside main pop */
+.token-pane{margin-top:10px;max-height:38vh;overflow:auto;border-top:1px solid rgba(255,255,255,.08);padding-top:10px;}
+
+.kbox.anki{background:#151a22 !important;border-color:#2a3240 !important;color:#e6edf3 !important;}
+.kbox.learn{background:#102744 !important;border-color:#2a5d9a !important;color:#e6edf3 !important;}
+/* sub-head one-line */
+.sub-head-row{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kbox-body{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
