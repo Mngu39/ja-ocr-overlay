@@ -350,3 +350,19 @@ img, .box, .popover{
   user-select:none;
 }
 
+/* === Kanji box accordion (text-translator style) === */
+.kbox{ display:block; }
+.kbox-headrow{ display:flex; align-items:baseline; gap:8px; min-width:0; }
+.kbox-desc{
+  display:none;
+  margin-top:8px;
+  padding-top:6px;
+  border-top:1px solid rgba(255,255,255,.08);
+  font-size:12px;
+  font-weight:500;
+  opacity:.92;
+  white-space:normal;
+  word-break:break-word;
+  line-height:1.5;
+}
+.kbox.open .kbox-desc{ display:block; }

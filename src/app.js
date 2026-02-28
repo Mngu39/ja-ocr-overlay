@@ -631,29 +631,56 @@ async function fillTokenView(tok){
     const box=document.createElement("div");
     box.className="kbox " + (anki ? "anki" : "learn");
     box.style.minWidth = minW+"px";
+
+    // 텍스트번역기와 동일한 동작:
+    // - 기본: 한 줄(漢字 • 훈/음)
+    // - anki가 있으면: 박스 자체가 늘어나며(accordion) 내부에 설명을 표시
+    // - anki가 없으면: 네이버 사전으로 이동
     box.innerHTML = `
-      <div class="kbox-head">${escapeHtml(ch)}</div>
-      <div class="kbox-body">${escapeHtml(glossText)}</div>
+      <div class="kbox-headrow">
+        <div class="kbox-head">${escapeHtml(ch)}</div>
+        <div class="kbox-body">${escapeHtml(glossText)}</div>
+      </div>
+      <div class="kbox-desc" aria-hidden="true"></div>
     `;
+
+    const descEl = box.querySelector(".kbox-desc");
 
     box.addEventListener("click",ev=>{
       ev.stopPropagation();
+
       if(anki){
-        if(kExplain.style.display==="none"){
-          kExplain.style.display="block";
-          kExplain.innerHTML = nl2br(anki.explain || "(설명 없음)");
+        const isOpening = !box.classList.contains("open");
+
+        // 다른 열린 박스는 닫기 (텍스트번역기처럼 1개만 펼침)
+        kwrapDiv.querySelectorAll(".kbox.open").forEach(other=>{
+          if(other===box) return;
+          other.classList.remove("open");
+          const od = other.querySelector(".kbox-desc");
+          if(od) od.innerHTML = "";
+          other.setAttribute("aria-expanded","false");
+        });
+
+        if(isOpening){
+          box.classList.add("open");
+          box.setAttribute("aria-expanded","true");
+          descEl.innerHTML = nl2br(anki.explain || "(설명 없음)");
+          descEl.setAttribute("aria-hidden","false");
         }else{
-          kExplain.style.display="none";
-          kExplain.innerHTML="";
+          box.classList.remove("open");
+          box.setAttribute("aria-expanded","false");
+          descEl.innerHTML = "";
+          descEl.setAttribute("aria-hidden","true");
         }
+
+        scheduleReposition();
       }else{
         openNaverJaLemma(ch);
       }
-      scheduleReposition();
     });
 
     kwrapDiv.appendChild(box);
-  }
+}
 
   scheduleReposition();
 }
