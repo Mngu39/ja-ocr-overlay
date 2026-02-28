@@ -137,12 +137,17 @@ html,body{
 .popover.ghost .popbody{ display:none; }
 .popover.ghost .popbar{
   margin:0;
-  background:rgba(20,20,23,.92);
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:10px;
+  display:inline-flex;
+  width:fit-content;
+  margin-left:auto;
+  background:transparent; /* 상단바 배경 제거 */
+  border:0;
+  border-radius:0;
+  padding:0;
   pointer-events:auto; /* 버튼만 클릭 가능 */
+  justify-content:flex-end;
 }
+.popover.ghost .popbar-left{ display:none; } /* 앞으로/뒤로 등 숨김 */
 .popover.ghost .popbar *{ pointer-events:auto; }
 
 
