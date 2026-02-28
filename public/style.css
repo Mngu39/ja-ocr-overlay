@@ -248,7 +248,7 @@ html,body{
 /* 한자들 래핑 */
 .kwrap{
   display:flex;
-  flex-wrap:wrap;
+  flex-direction:column;
   gap:8px;
   margin-bottom:8px;
 }
@@ -259,11 +259,15 @@ html,body{
   color:#e8eefc;
   border:1px solid #2a5d9a;
   border-radius:10px;
-  padding:6px 8px;
+  padding:6px 10px;
   font-weight:700;
   cursor:pointer;
   line-height:1.4;
-  min-width:84px;
+  width:100%;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:8px;
 }
 .kbox.learn{
   background:#102744;
@@ -277,17 +281,25 @@ html,body{
 .kbox-head{
   font-size:16px;
   font-weight:700;
-  margin-bottom:4px;
+  margin:0;
+  flex:0 0 auto;
+}
+.kbox-head::after{
+  content:" • ";
+  opacity:.75;
+  font-weight:600;
 }
 .kbox-body{
   font-size:13px;
   font-weight:600;
   opacity:.9;
+  margin:0;
+  flex:1 1 auto;
+  min-width:0;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
-
 /* 암기박사 상세 설명 */
 .k-explain{
   background:#1a1f29;
