@@ -12,18 +12,38 @@
     <div id="overlay"></div>
     <div id="hint">이미지 불러오는 중…</div>
 
-    <!-- 메인 팝업 -->
+        <!-- 메인 팝업 -->
     <div id="pop" class="popover" hidden>
-      <!-- 본문: 루비 붙은 원문(토큰 클릭 가능) -->
-      <div id="rubyLine" class="ruby-line">…</div>
+      <div id="popBar" class="popbar">
+        <div class="popbar-left">
+          <button id="btnBack" class="pbtn" title="뒤로" aria-label="뒤로" disabled>‹</button>
+          <button id="btnFwd" class="pbtn" title="앞으로" aria-label="앞으로" disabled>›</button>
+          <button id="btnGhost" class="pbtn" title="선택 모드" aria-label="선택 모드">◳</button>
+        </div>
+        <div class="popbar-right">
+          <button id="btnEdit" class="pbtn" title="수정" aria-label="수정">✎</button>
+          <button id="btnClose" class="pbtn" title="닫기" aria-label="닫기">✕</button>
+        </div>
+      </div>
 
-      <hr class="sep" />
+      <div id="popBody" class="popbody">
+        <!-- 문장 번역 화면 -->
+        <div id="viewSentence" class="view view-sentence">
+          <div id="rubyLine" class="ruby-line">…</div>
+          <hr class="sep" />
+          <div id="transLine" class="trans-line">…</div>
+        </div>
 
-      <!-- 번역 줄 -->
-      <div id="transLine" class="trans-line">…</div>
+        <!-- 형태소/한자 화면 (서브팝업 대신 메인팝업 전환) -->
+        <div id="viewToken" class="view view-token" hidden>
+          <div id="subHead" class="sub-head-row"></div>
+          <div id="kwrap" class="kwrap"></div>
+          <div id="kExplain" class="k-explain" style="display:none;"></div>
+        </div>
+      </div>
     </div>
 
-    <!-- 수정 다이얼로그 -->
+<!-- 수정 다이얼로그 -->
     <dialog id="editDlg">
       <form method="dialog" class="edit-form">
         <label>원문 수정</label>
@@ -35,16 +55,6 @@
       </form>
     </dialog>
 
-    <!-- 서브 팝업 (토큰 상세) -->
-    <div id="sub" class="subpop" hidden>
-      <!-- 한 줄 헤더: 표면형(+후리가나, 링크) / (lemma) / 번역 -->
-      <div id="subHead" class="sub-head-row"></div>
-
-      <!-- 한자 박스들 -->
-      <div id="kwrap" class="kwrap"></div>
-
-      <!-- 암기박사 설명 토글 영역 -->
-      <div id="kExplain" class="k-explain" style="display:none;"></div>
     </div>
   </main>
 

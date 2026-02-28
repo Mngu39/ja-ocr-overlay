@@ -86,68 +86,65 @@ html,body{
   color:var(--ink);
   border:1px solid var(--border);
   border-radius:14px;
-  /* 화살표 바가 팝업 안쪽에 붙을 공간 확보 (위/아래/좌/우 28px 패딩) */
-  padding:28px;
+  padding:12px 12px 14px;
   box-shadow:0 12px 40px rgba(0,0,0,.5);
   z-index:50;
 }
 
-/* 팝업 이동 화살표 바
-   - 팝업 내부 가장자리에 딱 붙음
-   - 길쭉한 막대 느낌 유지
-*/
-.arrow-bar{
-  position:absolute;
-  background:#2b2f3a;
-  border-radius:6px;
-  cursor:pointer;
-  color:#fff;
-  font-size:10px;
-  font-weight:600;
-  line-height:1;
+.popbar{
   display:flex;
   align-items:center;
-  justify-content:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:8px;
+}
+.popbar-left,.popbar-right{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.pbtn{
+  height:28px;
+  min-width:44px;
+  padding:0 12px;
+  border-radius:10px;
+  background:#2b2f3a;
+  color:#fff;
+  border:1px solid #3a3f4a;
+  font-size:14px;
+  font-weight:700;
+  line-height:28px;
+  text-align:center;
+  cursor:pointer;
   user-select:none;
-  -webkit-user-select:none;
-  opacity:.8;
 }
-.arrow-bar:active{
-  filter:brightness(1.2);
-}
-.arrow-bar.disabled{
-  opacity:.25;
-  cursor:not-allowed;
-  background:repeating-linear-gradient(
-    45deg,#333,#333 6px,#3b3b3b 6px,#3b3b3b 12px
-  );
+.pbtn:active{ filter:brightness(1.15); }
+.pbtn:disabled{ opacity:.35; cursor:default; }
+
+.view-token{
+  max-height:min(52vh, 520px);
+  overflow:auto;
 }
 
-/* 위/아래 막대: 가로로 길고 얇게 */
-.arrow-top,
-.arrow-bottom{
-  height:16px;
-  left:12%;
-  right:12%;
-  min-width:60px;
+/* 선택 모드(투명화): 본문은 완전히 숨기고, 바만 남김 */
+.popover.ghost{
+  background:transparent;
+  border-color:transparent;
+  box-shadow:none;
+  padding:0;
+  pointer-events:none; /* 바깥 클릭 통과 */
 }
-.arrow-top{   top:4px; }
-.arrow-bottom{bottom:4px; }
+.popover.ghost .popbody{ display:none; }
+.popover.ghost .popbar{
+  margin:0;
+  background:rgba(20,20,23,.92);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:10px;
+  pointer-events:auto; /* 버튼만 클릭 가능 */
+}
+.popover.ghost .popbar *{ pointer-events:auto; }
 
-/* 좌/우 막대: 세로로 길고 얇게 */
-.arrow-left,
-.arrow-right{
-  width:16px;
-  top:20%;
-  bottom:20%;
-  min-height:60px;
-  writing-mode:vertical-rl;
-  text-orientation:upright;
-  font-size:12px;
-  line-height:1;
-}
-.arrow-left{  left:4px; }
-.arrow-right{ right:4px; }
 
 /* 루비 줄 */
 .ruby-line{
@@ -188,69 +185,23 @@ html,body{
   word-break:break-word;
 }
 
-/* dock: ✕ / ✎ (팝업 옆에 세로로) */
-.dock{
-  position:absolute;
-  top:8px;
-  width:36px;
-  display:flex;
-  flex-direction:column;
-  gap:10px;
-  z-index:80;
-}
-.dock-left{ left:-44px; }
-.dock-right{ right:-44px; }
-
-.dock-btn{
-  width:36px;
-  height:36px;
-  border-radius:18px;
-  background:var(--dock-bg);
-  color:var(--dock-fg);
-  border:1px solid #3a3f4a;
-  font-size:14px;
-  font-weight:600;
-  line-height:36px;
-  text-align:center;
-  cursor:pointer;
-  user-select:none;
-}
-.dock-btn:active{
-  filter:brightness(1.2);
-}
-
-/* ====== 서브 팝업 ====== */
-.subpop{
-  position:absolute;
-  max-width:86vw;
-  background:var(--pop);
-  color:var(--ink);
-  border:1px solid var(--border);
-  border-radius:12px;
-  padding:10px 12px 12px;
-  z-index:60;
-  box-shadow:0 8px 30px rgba(0,0,0,.5);
-  font-size:14px;
-  line-height:1.5;
-}
-
 /* 헤더 한 줄:
    [표면형(루비, 링크)]  (lemma)  [번역]
    - lemma / meaning 이 표면형 글자(형태소)에 맞춰 baseline으로 정렬되도록
 */
 .sub-head-row{
   display:flex;
-  flex-wrap:wrap;
+  flex-wrap:nowrap;
   align-items:baseline;
-  column-gap:8px;
-  row-gap:4px;
+  gap:8px;
   margin-bottom:8px;
   font-size:15px;
   line-height:1.5;
   color:#fff;
-  word-break:break-word;
+  overflow:hidden;
 }
 .sub-head-row a.surf{
+  flex:0 0 auto;
   color:#fff;
   text-decoration:none;
   font-weight:700;
@@ -263,10 +214,16 @@ html,body{
   color:#9fb3ff;
 }
 .sub-head-row .lemma{
+  flex:0 0 auto;
   opacity:.7;
   font-size:14px;
 }
 .sub-head-row .meaning{
+  flex:1 1 auto;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
   color:#e7f6ff;
   font-size:15px;
   font-weight:500;
@@ -282,20 +239,24 @@ html,body{
 
 /* 개별 한자 박스 */
 .kbox{
-  background:#222a39;
+  background:#102744; /* learn 기본 */
   color:#e8eefc;
-  border:1px solid #2a2f3b;
+  border:1px solid #2a5d9a;
   border-radius:10px;
   padding:6px 8px;
   font-weight:700;
   cursor:pointer;
   line-height:1.4;
-  word-break:break-word;
-  min-width:72px;
+  min-width:84px;
+}
+.kbox.learn{
+  background:#102744;
+  border-color:#2a5d9a;
 }
 .kbox.anki{
-  background:#2d3b29;
-  color:#e8f6e8;
+  background:#151a22;
+  color:#e8eefc;
+  border-color:#2a2f3b;
 }
 .kbox-head{
   font-size:16px;
@@ -306,8 +267,9 @@ html,body{
   font-size:13px;
   font-weight:600;
   opacity:.9;
-  white-space:normal;
-  word-break:break-word;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 /* 암기박사 상세 설명 */
@@ -355,26 +317,8 @@ menu{
 }
 
 /* 선택 방지 */
-img, .box, .popover, .subpop{
+img, .box, .popover{
   -webkit-user-select:none;
   user-select:none;
 }
 
-/* unify: ensure sub popover never shows */
-#sub{ display:none !important; visibility:hidden !important; }
-
-
-/* === PATCH: dock compact + select-mode === */
-.dock{position:absolute;top:8px;right:8px;display:flex;gap:6px;z-index:3;flex-direction:row;}
-.dock-btn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:16px;line-height:1;}
-/* keep toggle/select/back buttons clickable even in select-mode */
-#pop.select-mode .pop-body{opacity:0.12;pointer-events:none;}
-#pop.select-mode .dock{opacity:1;pointer-events:auto;}
-/* token pane scroll inside main pop */
-.token-pane{margin-top:10px;max-height:38vh;overflow:auto;border-top:1px solid rgba(255,255,255,.08);padding-top:10px;}
-
-.kbox.anki{background:#151a22 !important;border-color:#2a3240 !important;color:#e6edf3 !important;}
-.kbox.learn{background:#102744 !important;border-color:#2a5d9a !important;color:#e6edf3 !important;}
-/* sub-head one-line */
-.sub-head-row{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.kbox-body{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
