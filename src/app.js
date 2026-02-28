@@ -664,7 +664,18 @@ async function fillTokenView(tok){
         if(isOpening){
           box.classList.add("open");
           box.setAttribute("aria-expanded","true");
-          descEl.innerHTML = nl2br(anki.explain || "(설명 없음)");
+          // 설명 + 번호(#unit) 배지(텍스트번역기와 동일)
+const unitRaw = (anki.unit || "").toString().trim();
+let explainRaw = (anki.explain || "").toString().trim();
+
+// explain 안에 "#unit"이 이미 들어있으면 중복 표시 방지
+if(unitRaw){
+  const esc = unitRaw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  explainRaw = explainRaw.replace(new RegExp("\\s*#"+esc+"\\s*$"), "").trim();
+}
+const explainHtml = nl2br(explainRaw || "(설명 없음)");
+const badgeHtml = unitRaw ? `<span class="kdesc-badge">#${escapeHtml(unitRaw)}</span>` : "";
+descEl.innerHTML = `<div class="kdesc-row"><div class="kdesc-text">${explainHtml}</div>${badgeHtml}</div>`;
           descEl.setAttribute("aria-hidden","false");
         }else{
           box.classList.remove("open");

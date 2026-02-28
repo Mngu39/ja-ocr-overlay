@@ -365,4 +365,27 @@ img, .box, .popover{
   word-break:break-word;
   line-height:1.5;
 }
+/* 설명(텍스트) + #번호 배지 */
+.kdesc-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.kdesc-text{
+  flex:1 1 auto;
+  min-width:0;
+}
+.kdesc-badge{
+  flex:0 0 auto;
+  white-space:nowrap;
+  font-size:11px;
+  line-height:1;
+  padding:4px 8px;
+  border-radius:999px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.10);
+  opacity:.92;
+}
+
 .kbox.open .kbox-desc{ display:block; }
