@@ -86,7 +86,7 @@ html,body{
   color:var(--ink);
   border:1px solid var(--border);
   border-radius:14px;
-  padding:12px 12px 14px;
+  padding:10px 12px 12px;
   box-shadow:0 12px 40px rgba(0,0,0,.5);
   z-index:50;
 }
@@ -96,7 +96,7 @@ html,body{
   align-items:center;
   justify-content:space-between;
   gap:8px;
-  margin-bottom:8px;
+  margin-bottom:6px;
 }
 .popbar-left,.popbar-right{
   display:flex;
@@ -126,29 +126,39 @@ html,body{
   overflow:auto;
 }
 
-/* 선택 모드(투명화): 본문은 완전히 숨기고, 바만 남김 */
+/* 선택 모드(투명화/가리기): 본문/배경/앞뒤버튼은 숨기되(공간 유지), 버튼 3개는 제자리 고정 */
 .popover.ghost{
   background:transparent;
   border-color:transparent;
   box-shadow:none;
-  padding:0;
-  pointer-events:none; /* 바깥 클릭 통과 */
+  /* 아래 문장박스 클릭 통과 */
+  pointer-events:none;
 }
-.popover.ghost .popbody{ display:none; }
+
+/* 본문은 '숨김(공간 유지)' */
+.popover.ghost .popbody{
+  visibility:hidden;
+}
+
+/* 상단바는 배경을 없애고, 클릭은 버튼(오른쪽 그룹)만 받음 */
 .popover.ghost .popbar{
-  margin:0;
-  display:inline-flex;
-  width:fit-content;
-  margin-left:auto;
-  background:transparent; /* 상단바 배경 제거 */
+  background:transparent;
   border:0;
   border-radius:0;
-  padding:0;
-  pointer-events:auto; /* 버튼만 클릭 가능 */
-  justify-content:flex-end;
+  pointer-events:none; /* 빈 영역은 클릭 통과 */
 }
-.popover.ghost .popbar-left{ display:none; } /* 앞으로/뒤로 등 숨김 */
-.popover.ghost .popbar *{ pointer-events:auto; }
+
+/* 앞으로/뒤로는 숨기되 공간 유지(버튼 위치 흔들림 방지) */
+.popover.ghost .popbar-left{
+  visibility:hidden;
+  pointer-events:none;
+}
+
+/* 오른쪽 버튼(선택/수정/닫기)은 계속 클릭 가능 */
+.popover.ghost .popbar-right,
+.popover.ghost .popbar-right *{
+  pointer-events:auto;
+}
 
 
 /* 루비 줄 */
