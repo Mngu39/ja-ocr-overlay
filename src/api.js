@@ -14,7 +14,7 @@ export async function gcvOCR(id){
   const j = await r.json(); return j.annos || [];
 }
 
-// 후리가나/번역 → Worker 프록시
+// 후리가나 → Worker 프록시(유지)
 export async function getFurigana(text){
   const r = await fetch(`${WORKER_BASE}/run/furigana`, {
     method:"POST", headers:{ "content-type":"application/json" },
@@ -23,13 +23,22 @@ export async function getFurigana(text){
   if(!r.ok) throw new Error("furigana failed");
   return await r.json();
 }
+
+// ✅ 번역만 텍스트번역기 Worker(solitary-mud-8caf)로 통일
+const TEXT_TRANSLATE_URL = "https://solitary-mud-8caf.rlaalsrbr.workers.dev/translate";
+
 export async function translateJaKo(text){
-  const r = await fetch(`${WORKER_BASE}/run/translate`, {
-    method:"POST", headers:{ "content-type":"application/json" },
-    body: JSON.stringify({ src:"ja", tgt:"ko", text })
+  const r = await fetch(TEXT_TRANSLATE_URL, {
+    method:"POST",
+    headers:{ "content-type":"application/json" },
+    // solitary-mud-8caf expects: {text, target}
+    body: JSON.stringify({ text, target:"KO" })
   });
   if(!r.ok) throw new Error("translate failed");
-  return await r.json(); // { text, result }
+  const j = await r.json(); // {translation}
+  const out = (j && (j.translation || j.text || j.result)) || "";
+  // 기존 호환: { text, result }
+  return { text: out, result: out };
 }
 
 export function openNaverJaLemma(term){
