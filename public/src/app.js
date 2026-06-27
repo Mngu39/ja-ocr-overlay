@@ -70,6 +70,31 @@ function uniq(arr){
   return Array.from(new Set(arr));
 }
 
+// ===== lemma 읽기 캐시 =====
+// 토큰 상세 화면에서는 텍스트번역기처럼 “기본형 + 기본형 요미가나”를 보여주기 위해
+// 표면형 reading을 그대로 쓰지 않고 lemma를 다시 후리가나 API에 보내 reading을 얻는다.
+const lemmaReadCache = new Map();
+function readingFromFuriganaTokens(tokens){
+  return (tokens||[]).map(t=>{
+    const surf = String(t.surface || t.text || "");
+    const read = String(t.reading || t.read || t.kana || "");
+    return read ? kataToHira(read) : surf;
+  }).join("");
+}
+function getLemmaReading(lemma){
+  lemma = String(lemma||"");
+  if(!lemma) return Promise.resolve("");
+  if(lemmaReadCache.has(lemma)) return Promise.resolve(lemmaReadCache.get(lemma));
+  return getFurigana(lemma).then(res=>{
+    const rt = readingFromFuriganaTokens(res?.tokens || res?.result || res?.morphs || res?.morphemes || []);
+    lemmaReadCache.set(lemma, rt);
+    return rt;
+  }).catch(()=>{
+    lemmaReadCache.set(lemma, "");
+    return "";
+  });
+}
+
 // ====== 사용량 카운트 =====
 function quotaKey(){
   const d=new Date();
@@ -570,22 +595,34 @@ async function openMainPopover(anchor, text){
 // ===== 토큰 뷰 채우기 =====
 async function fillTokenView(tok){
   const surface = tok.surface || "";
-  const reading = kataToHira(tok.reading || "");
+  const surfaceReading = kataToHira(tok.reading || "");
   const lemma   = tok.lemma   || surface;
 
-  // 헤더
+  // 헤더: 텍스트번역기와 통일
+  // - 본문: 기본형(lemma) + 기본형 요미가나
+  // - 괄호: 실제 화면에 나온 활용형(surface)
   const navUrl = `https://ja.dict.naver.com/#/search?range=all&query=${encodeURIComponent(lemma||surface)}`;
+  const renderLemmaLink = (lemmaReading="") => {
+    const link = document.getElementById("subLemmaLink");
+    if(!link) return;
+    link.innerHTML = (hasKanji(lemma) && lemmaReading)
+      ? `<ruby>${escapeHtml(lemma)}<rt>${escapeHtml(lemmaReading)}</rt></ruby>`
+      : escapeHtml(lemma || surface);
+  };
+
+  const initialLemmaReading = (lemma === surface) ? surfaceReading : "";
   subHead.innerHTML = `
-    <a class="surf" href="${navUrl}" target="_blank" rel="noopener noreferrer">
-      ${
-        hasKanji(surface) && reading
-        ? `<ruby>${escapeHtml(surface)}<rt>${escapeHtml(reading)}</rt></ruby>`
-        : escapeHtml(surface)
-      }
-    </a>
-    <span class="lemma">(${escapeHtml(lemma)})</span>
+    <a id="subLemmaLink" class="surf" href="${navUrl}" target="_blank" rel="noopener noreferrer"></a>
+    <span class="lemma">${surface && surface!==lemma ? `(${escapeHtml(surface)})` : ""}</span>
     <span id="subMeaning" class="meaning"></span>
   `;
+  renderLemmaLink(initialLemmaReading);
+  if(hasKanji(lemma)){
+    getLemmaReading(lemma).then(rt=>{
+      renderLemmaLink(rt || initialLemmaReading);
+      scheduleReposition();
+    });
+  }
 
   kwrapDiv.innerHTML = "";
   kExplain.style.display="none";
@@ -603,7 +640,7 @@ async function fillTokenView(tok){
 
   await DB_READY;
 
-  const uniqKanji = uniq(Array.from(surface).filter(ch=>hasKanji(ch)));
+  const uniqKanji = uniq(Array.from(lemma).filter(ch=>hasKanji(ch)));
 
   // 박스 min-width: 가장 긴 gloss 길이 기반
   let maxGlossLen=0;
