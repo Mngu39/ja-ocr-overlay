@@ -12,6 +12,8 @@
 
   --dock-bg:#2b2f3a;
   --dock-fg:#fff;
+  --font-ja:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic","YuGothic","Noto Sans JP","Noto Sans CJK JP","Meiryo",sans-serif;
+  --font-ko:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,"Apple SD Gothic Neo","Noto Sans CJK KR","Malgun Gothic",sans-serif;
 }
 
 *{ box-sizing:border-box; }
@@ -20,8 +22,7 @@ html,body{
   height:100%;
   background:var(--bg);
   color:var(--ink);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,
-    "Apple SD Gothic Neo","Noto Sans CJK KR","Noto Sans JP","Malgun Gothic",sans-serif;
+  font-family:var(--font-ko);
 }
 #stage{
   position:relative;
@@ -161,6 +162,27 @@ html,body{
   pointer-events:auto;
 }
 
+
+
+/* ====== Japanese glyph forcing ======
+   Japanese original/token/kanji glyphs should use JP font/lang so 新字体-like glyphs
+   do not fall back to Korean CJK glyph forms. Korean translation stays on --font-ko. */
+.ruby-line,
+.ruby-line *,
+.tok,
+.tok *,
+.sub-head-row a.surf,
+.sub-head-row a.surf *,
+.kbox-head{
+  font-family:var(--font-ja);
+  font-synthesis-weight:none;
+}
+.trans-line,
+.sub-head-row .meaning,
+.kbox-body,
+.kbox-desc{
+  font-family:var(--font-ko);
+}
 
 /* 루비 줄 */
 .ruby-line{

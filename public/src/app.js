@@ -502,6 +502,7 @@ function renderFallbackTokens(container, text){
     if(!tok.trim()) return;
     const span=document.createElement("span");
     span.className="tok";
+    span.lang="ja";
     span.textContent=tok;
     span.addEventListener("click",ev=>{
       ev.stopPropagation();
@@ -519,9 +520,9 @@ function renderFuriganaTokens(container, tokens){
     const dataAttr =
       `data-surf="${surf}" data-lemma="${escapeHtml(t.lemma||t.surface)}" data-read="${read}"`;
     if(hasKanji(t.surface) && t.reading){
-      return `<span class="tok" ${dataAttr}><ruby>${surf}<rt>${read}</rt></ruby></span>`;
+      return `<span class="tok" lang="ja" ${dataAttr}><ruby lang="ja">${surf}<rt>${read}</rt></ruby></span>`;
     }
-    return `<span class="tok" ${dataAttr}>${surf}</span>`;
+    return `<span class="tok" lang="ja" ${dataAttr}>${surf}</span>`;
   }).join("");
 
   container.querySelectorAll(".tok").forEach(span=>{
@@ -606,13 +607,13 @@ async function fillTokenView(tok){
     const link = document.getElementById("subLemmaLink");
     if(!link) return;
     link.innerHTML = (hasKanji(lemma) && lemmaReading)
-      ? `<ruby>${escapeHtml(lemma)}<rt>${escapeHtml(lemmaReading)}</rt></ruby>`
+      ? `<ruby lang="ja">${escapeHtml(lemma)}<rt>${escapeHtml(lemmaReading)}</rt></ruby>`
       : escapeHtml(lemma || surface);
   };
 
   const initialLemmaReading = (lemma === surface) ? surfaceReading : "";
   subHead.innerHTML = `
-    <a id="subLemmaLink" class="surf" href="${navUrl}" target="_blank" rel="noopener noreferrer"></a>
+    <a id="subLemmaLink" class="surf" lang="ja" href="${navUrl}" target="_blank" rel="noopener noreferrer"></a>
     <span class="lemma">${surface && surface!==lemma ? `(${escapeHtml(surface)})` : ""}</span>
     <span id="subMeaning" class="meaning"></span>
   `;
@@ -675,7 +676,7 @@ async function fillTokenView(tok){
     // - anki가 없으면: 네이버 사전으로 이동
     box.innerHTML = `
       <div class="kbox-headrow">
-        <div class="kbox-head">${escapeHtml(ch)}</div>
+        <div class="kbox-head" lang="ja">${escapeHtml(ch)}</div>
         <div class="kbox-body">${escapeHtml(glossText)}</div>
       </div>
       <div class="kbox-desc" aria-hidden="true"></div>
