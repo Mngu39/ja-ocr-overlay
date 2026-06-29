@@ -6,6 +6,14 @@ import {
   openNaverJaLemma,
 } from "./api.js";
 import { placeMainPopover } from "./place.js";
+import {
+  getLastSession,
+  setLastSession,
+  searchSessions,
+  resolveSession,
+  saveItem,
+  downscaleImageElement,
+} from "./log.js";
 
 const stage     = document.getElementById("stage");
 const imgEl     = document.getElementById("img");
@@ -30,6 +38,17 @@ const editDlg   = document.getElementById("editDlg");
 const editInput = document.getElementById("editInput");
 const editOkBtn = document.getElementById("editOk");
 
+const sessionDlg = document.getElementById("sessionDlg");
+const sessionUrlInput = document.getElementById("sessionUrlInput");
+const sessionCandidates = document.getElementById("sessionCandidates");
+const sessionHint = document.getElementById("sessionHint");
+const sessionUseBtn = document.getElementById("sessionUseBtn");
+
+const btnSaveSentence = document.getElementById("btnSaveSentence");
+const btnNewSaveSentence = document.getElementById("btnNewSaveSentence");
+const btnSaveToken = document.getElementById("btnSaveToken");
+const btnNewSaveToken = document.getElementById("btnNewSaveToken");
+
 const subHead   = document.getElementById("subHead");
 const kwrapDiv  = document.getElementById("kwrap");
 const kExplain  = document.getElementById("kExplain");
@@ -39,8 +58,13 @@ let annos = [];            // [{text, polygon:[[x,y]..]}, ...]
 let selectedIdxs = [];     // [idx, ...] (선택 순서)
 let ghostMode = false;
 
-let lastToken = null;      // {surface, lemma, reading}
+let lastToken = null;      // {surface, lemma, reading, start, end}
 let inTokenView = false;
+
+// ===== Learning log state =====
+let currentImageId = "";
+let currentSentenceText = "";
+let currentSentenceTranslation = "";
 
 // ===== Kanji DBs =====
 let KANJI = {};            // attr
@@ -257,6 +281,7 @@ function mergeSoftLineBreakAnnots(list){
     const qs=new URLSearchParams(location.search);
     const id=qs.get("id");
     if(!id) throw new Error("?id= 필요");
+    currentImageId = id;
 
     imgEl.onload = async ()=>{
       const q=tryConsumeQuota();
@@ -517,8 +542,10 @@ function renderFuriganaTokens(container, tokens){
   container.innerHTML = tokens.map(t=>{
     const surf = escapeHtml(t.surface);
     const read = escapeHtml(t.reading||"");
+    const start = Number.isFinite(t.start) ? String(t.start) : "";
+    const end = Number.isFinite(t.end) ? String(t.end) : "";
     const dataAttr =
-      `data-surf="${surf}" data-lemma="${escapeHtml(t.lemma||t.surface)}" data-read="${read}"`;
+      `data-surf="${surf}" data-lemma="${escapeHtml(t.lemma||t.surface)}" data-read="${read}" data-start="${start}" data-end="${end}"`;
     if(hasKanji(t.surface) && t.reading){
       return `<span class="tok" lang="ja" ${dataAttr}><ruby lang="ja">${surf}<rt>${read}</rt></ruby></span>`;
     }
@@ -531,7 +558,9 @@ function renderFuriganaTokens(container, tokens){
       showTokenView({
         surface: span.dataset.surf || "",
         lemma:   span.dataset.lemma || span.dataset.surf || "",
-        reading: span.dataset.read  || ""
+        reading: span.dataset.read  || "",
+        start:   span.dataset.start === "" ? null : Number(span.dataset.start),
+        end:     span.dataset.end === "" ? null : Number(span.dataset.end)
       });
     });
   });
@@ -539,6 +568,8 @@ function renderFuriganaTokens(container, tokens){
 
 // 메인 팝업 실제 렌더
 async function openMainPopover(anchor, text){
+  currentSentenceText = text || "";
+  currentSentenceTranslation = "";
   pop.hidden = false;
   showSentenceView();
   setGhost(false);
@@ -576,11 +607,22 @@ async function openMainPopover(anchor, text){
       }))
       .filter(t=>t.surface);
 
+    // Anki 강조용: 토큰이 원문 내 어느 위치에 있었는지 저장한다.
+    let cursor = 0;
+    for(const t of tokens){
+      const pos = text.indexOf(t.surface, cursor);
+      const start = pos >= 0 ? pos : cursor;
+      t.start = start;
+      t.end = start + t.surface.length;
+      cursor = t.end;
+    }
+
     if(tokens.length){
       renderFuriganaTokens(rubyLine, tokens);
     }
 
     const out = tr?.text || tr?.result || tr?.translation || "";
+    currentSentenceTranslation = out || "";
     transLine.textContent = out || "(번역 없음)";
   }catch(e){
     console.error(e);
@@ -733,6 +775,220 @@ descEl.innerHTML = `<div class="kdesc-row"><div class="kdesc-text">${explainHtml
 
   scheduleReposition();
 }
+
+
+// ===== Learning log 저장 =====
+function setSaveButtonState(btn, state){
+  if(!btn) return;
+  btn.classList.remove("saved", "error");
+  if(state === "saving"){
+    btn.dataset.prevText = btn.textContent;
+    btn.textContent = "…";
+    btn.disabled = true;
+  }else if(state === "saved"){
+    btn.textContent = "✓";
+    btn.classList.add("saved");
+    btn.disabled = false;
+    setTimeout(()=>{
+      btn.textContent = btn.dataset.prevText || (btn.id.includes("New") ? "＋" : "💾");
+      btn.classList.remove("saved");
+    }, 900);
+  }else if(state === "error"){
+    btn.textContent = "!";
+    btn.classList.add("error");
+    btn.disabled = false;
+    setTimeout(()=>{
+      btn.textContent = btn.dataset.prevText || (btn.id.includes("New") ? "＋" : "💾");
+      btn.classList.remove("error");
+    }, 1400);
+  }else{
+    btn.textContent = btn.dataset.prevText || btn.textContent;
+    btn.disabled = false;
+  }
+}
+
+function currentTokenPayload(){
+  const tok = lastToken || {};
+  const surface = tok.surface || "";
+  const lemma = tok.lemma || surface;
+  let start = Number.isFinite(tok.start) ? tok.start : null;
+  let end = Number.isFinite(tok.end) ? tok.end : null;
+  if(start == null && surface && currentSentenceText){
+    const pos = currentSentenceText.indexOf(surface);
+    if(pos >= 0){ start = pos; end = pos + surface.length; }
+  }
+  return {
+    target_word: lemma,
+    target_surface: surface,
+    target_word_lemma: lemma,
+    target_word_reading: tok.reading || "",
+    target_start_index: start,
+    target_end_index: end,
+  };
+}
+
+async function buildSavePayload(itemType, session){
+  if(!currentSentenceText.trim()) throw new Error("저장할 원문이 없습니다.");
+
+  const shot = await downscaleImageElement(imgEl, { longEdge:1600, quality:0.78 });
+  const base = {
+    session_id: session.id,
+    item_type: itemType,
+    source_text: currentSentenceText,
+    // 즉시 번역 결과는 DB 핵심값으로 쓰지 않지만, 디버그/미리보기용으로만 보낼 수 있게 둔다.
+    ui_translation: currentSentenceTranslation || "",
+    source_image_id: currentImageId || "",
+    source_image_url: imgEl.currentSrc || imgEl.src || "",
+    screenshot: shot,
+    page_url: location.href,
+    created_tz_offset_min: new Date().getTimezoneOffset(),
+  };
+
+  if(itemType === "kanji_box"){
+    Object.assign(base, currentTokenPayload());
+    if(!base.target_word) throw new Error("저장할 단어가 없습니다.");
+  }
+  return base;
+}
+
+async function doSave(itemType, session, btn){
+  setSaveButtonState(btn, "saving");
+  try{
+    const payload = await buildSavePayload(itemType, session);
+    const out = await saveItem(payload);
+    if(out?.session) setLastSession(out.session);
+    setSaveButtonState(btn, "saved");
+  }catch(e){
+    console.error(e);
+    alert(`학습로그 저장 실패: ${e.message || e}`);
+    setSaveButtonState(btn, "error");
+  }
+}
+
+async function saveToRecent(itemType, btn){
+  let session = getLastSession();
+  if(!session?.id){
+    session = await chooseOrCreateSession();
+    if(!session) return;
+  }
+  await doSave(itemType, session, btn);
+}
+
+async function saveToNewOrChosen(itemType, btn){
+  const session = await chooseOrCreateSession();
+  if(!session) return;
+  await doSave(itemType, session, btn);
+}
+
+let sessionSearchTimer = null;
+function renderSessionCandidates(list, resolve){
+  sessionCandidates.innerHTML = "";
+  if(!Array.isArray(list) || !list.length) return;
+  for(const s of list){
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "session-candidate";
+    b.innerHTML = `
+      <div class="title">${escapeHtml(s.title || s.session_key || s.raw_url || s.id)}</div>
+      <div class="url">${escapeHtml(s.canonical_url || s.raw_url || "")}</div>
+    `;
+    b.addEventListener("click",()=>{
+      setLastSession(s);
+      sessionDlg.close("selected");
+      resolve(s);
+    });
+    sessionCandidates.appendChild(b);
+  }
+}
+
+function chooseOrCreateSession(){
+  return new Promise(async resolve=>{
+    sessionUrlInput.value = "";
+    sessionCandidates.innerHTML = "";
+    sessionHint.textContent = "링크가 기존 세션과 일치하면 아래에 후보가 표시됩니다.";
+
+    // 버튼 클릭 직후라 clipboard 권한이 허용될 수 있다. 실패해도 조용히 무시.
+    try{
+      const clip = await navigator.clipboard?.readText?.();
+      if(/^https?:\/\//i.test((clip||"").trim())){
+        sessionUrlInput.value = clip.trim();
+      }
+    }catch{ /* ignore */ }
+
+    const onInput = ()=>{
+      clearTimeout(sessionSearchTimer);
+      const q = sessionUrlInput.value.trim();
+      if(!q){ sessionCandidates.innerHTML = ""; return; }
+      sessionSearchTimer = setTimeout(async()=>{
+        try{
+          const out = await searchSessions(q);
+          renderSessionCandidates(out?.sessions || [], resolve);
+        }catch(e){
+          console.warn("session search failed", e);
+        }
+      }, 180);
+    };
+
+    const onUse = async ev=>{
+      ev.preventDefault();
+      const url = sessionUrlInput.value.trim();
+      if(!url){
+        sessionHint.textContent = "세션 링크를 입력하세요.";
+        return;
+      }
+      sessionUseBtn.disabled = true;
+      sessionUseBtn.textContent = "확인 중…";
+      try{
+        const out = await resolveSession(url);
+        const session = out?.session;
+        if(!session) throw new Error("세션 생성/조회 실패");
+        setLastSession(session);
+        cleanup();
+        sessionDlg.close("ok");
+        resolve(session);
+      }catch(e){
+        sessionHint.textContent = `세션 처리 실패: ${e.message || e}`;
+      }finally{
+        sessionUseBtn.disabled = false;
+        sessionUseBtn.textContent = "저장";
+      }
+    };
+
+    const onClose = ()=>{
+      cleanup();
+      if(sessionDlg.returnValue !== "ok" && sessionDlg.returnValue !== "selected") resolve(null);
+    };
+    const cleanup = ()=>{
+      sessionUrlInput.removeEventListener("input", onInput);
+      sessionUseBtn.removeEventListener("click", onUse);
+      sessionDlg.removeEventListener("close", onClose);
+    };
+
+    sessionUrlInput.addEventListener("input", onInput);
+    sessionUseBtn.addEventListener("click", onUse);
+    sessionDlg.addEventListener("close", onClose, {once:true});
+    sessionDlg.showModal();
+    sessionUrlInput.focus();
+    onInput();
+  });
+}
+
+btnSaveSentence?.addEventListener("click", ev=>{
+  ev.stopPropagation();
+  saveToRecent("sentence_box", btnSaveSentence);
+});
+btnNewSaveSentence?.addEventListener("click", ev=>{
+  ev.stopPropagation();
+  saveToNewOrChosen("sentence_box", btnNewSaveSentence);
+});
+btnSaveToken?.addEventListener("click", ev=>{
+  ev.stopPropagation();
+  saveToRecent("kanji_box", btnSaveToken);
+});
+btnNewSaveToken?.addEventListener("click", ev=>{
+  ev.stopPropagation();
+  saveToNewOrChosen("kanji_box", btnNewSaveToken);
+});
 
 // ===== 레이아웃 이벤트 =====
 function onResize(){

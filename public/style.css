@@ -411,3 +411,85 @@ img, .box, .popover{
 }
 
 .kbox.open .kbox-desc{ display:block; }
+
+/* ====== Learning log save buttons ====== */
+.save-row{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:6px;
+  margin-top:6px;
+}
+.savebtn{
+  height:28px;
+  min-width:36px;
+  padding:0 9px;
+  border-radius:9px;
+  background:#242936;
+  color:#fff;
+  border:1px solid #3a4152;
+  font-size:14px;
+  font-weight:800;
+  line-height:26px;
+  cursor:pointer;
+  user-select:none;
+}
+.savebtn:active{ filter:brightness(1.18); }
+.savebtn.saved{
+  background:#12351f;
+  border-color:#267a43;
+}
+.savebtn.error{
+  background:#3a1820;
+  border-color:#8d3346;
+}
+.session-form{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  min-width:min(88vw, 620px);
+}
+.session-input{
+  width:100%;
+  background:#11121a;
+  color:var(--ink);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:10px;
+  font-size:15px;
+}
+.session-hint{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.4;
+}
+.session-candidates{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  max-height:220px;
+  overflow:auto;
+}
+.session-candidate{
+  text-align:left;
+  border:1px solid #303747;
+  background:#171b25;
+  color:var(--ink);
+  border-radius:10px;
+  padding:8px 10px;
+  cursor:pointer;
+}
+.session-candidate .title{
+  font-weight:700;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.session-candidate .url{
+  margin-top:2px;
+  color:var(--muted);
+  font-size:12px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
